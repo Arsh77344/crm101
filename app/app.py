@@ -444,7 +444,10 @@ class App(LaunchPages,V37BusinessPages,V27MarketingPages,ProcessOrchestratorPage
 
     def do_GET(self):
         # Hosting platforms probe /health with an internal Host header; it returns no private data.
-        if urllib.parse.urlparse(self.path).path!='/health' and not self.allowed_host():return
+        if urllib.parse.urlparse(self.path).path=='/health':
+            # Liveness only: no database or integration work, so it answers instantly even on a starved CPU.
+            return self.json_response({'status':'ok','product':PRODUCT_NAME,'version':APP_VERSION},200)
+        if not self.allowed_host():return
         p=urllib.parse.urlparse(self.path);q=urllib.parse.parse_qs(p.query);self.q=q
         if re.fullmatch(r'/webhooks/meta/[^/]+',p.path):
             try:
