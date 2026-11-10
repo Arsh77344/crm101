@@ -194,8 +194,9 @@ def _rotate_fictional_test_passwords() -> None:
     """Create per-install test credentials so the shared ZIP contains no plaintext password."""
     credentials=[]
     with sqlite3.connect(ACTIVE_DB) as con:
-        for email,label in [('owner@teamtest.invalid','Owner'),('sales@teamtest.invalid','Sales')]:
-            password=secrets.token_urlsafe(15)
+        for email,label,env_name in [('owner@teamtest.invalid','Owner','CRM_OWNER_PASSWORD'),('sales@teamtest.invalid','Sales','CRM_SALES_PASSWORD')]:
+            # Hosted deployments set these so the password is known without reading a file on the server.
+            password=os.environ.get(env_name,'').strip() or secrets.token_urlsafe(15)
             salt=secrets.token_bytes(16)
             digest=hashlib.pbkdf2_hmac('sha256',password.encode('utf-8'),salt,310_000)
             cur=con.execute('UPDATE v11_users SET password_salt=?,password_hash=? WHERE lower(email)=lower(?)',(
@@ -285,7 +286,7 @@ def main() -> None:
     ap=argparse.ArgumentParser(description='Start Commerce Business OS 1.0.0-beta.6 Team Test release.')
     ap.add_argument('--doctor',action='store_true')
     ap.add_argument('--no-browser',action='store_true')
-    ap.add_argument('--port',type=int,default=8765)
+    ap.add_argument('--port',type=int,default=int(os.environ.get('PORT','8765') or 8765))
     ap.add_argument('--diagnostics',action='store_true')
     ap.add_argument('--prepare-full-runtime',action='store_true',help='Install the full private runtime including optional MCP support.')
     args=ap.parse_args()
