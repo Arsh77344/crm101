@@ -1,5 +1,6 @@
 'use client';
 import CrudPage from '@/components/CrudPage';
+import Children from '@/components/Children';
 
 export default function Suppliers() {
   return <CrudPage cfg={{
@@ -25,6 +26,27 @@ export default function Suppliers() {
       { key: 'lead_time_days', label: 'Lead days', num: true },
       { key: 'status', label: 'Status', fmt: 'badge' },
     ],
+    sidePanel: (row) => (
+      <Children parentId={row.supplier_id} cfg={{
+        table: 'supplier_orders', pk: 'supplier_order_id', parentKey: 'supplier_id',
+        title: 'Commissions with this supplier', order: 'expected_on',
+        select: '*,products(public_product_name)',
+        columns: [
+          { key: 'reference', label: 'Ref' },
+          { key: 'products.public_product_name', label: 'Piece' },
+          { key: 'pieces', label: 'No.', num: true },
+          { key: 'agreed_cost', label: 'Cost', fmt: 'money', num: true },
+          { key: 'status', label: 'Status' },
+        ],
+        fields: [
+          { name: 'reference', label: 'Reference', width: 110 },
+          { name: 'product_id', label: 'Piece', width: 180,
+            lookup: { table: 'products', pk: 'product_id', label: 'public_product_name' } },
+          { name: 'pieces', label: 'Pieces', type: 'number', width: 80 },
+          { name: 'agreed_cost', label: 'Agreed cost', type: 'number', step: '0.01', width: 120 },
+          { name: 'expected_on', label: 'Expected', type: 'date', width: 140 },
+        ],
+      }} />),
     fields: [
       { name: 'name', label: 'Name', required: true },
       { name: 'kind', label: 'Kind', options: ['Weaver', 'Dyer', 'Finisher', 'Packaging', 'Photographer', 'Other'] },

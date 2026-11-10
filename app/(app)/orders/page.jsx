@@ -1,5 +1,6 @@
 'use client';
 import CrudPage from '@/components/CrudPage';
+import Children from '@/components/Children';
 import { money } from '@/components/ui';
 
 export default function Orders() {
@@ -30,6 +31,22 @@ export default function Orders() {
       { key: 'ordered_at', label: 'Date', fmt: 'date' },
       { key: 'total', label: 'Total', fmt: 'money', num: true },
     ],
+    sidePanel: (row) => (
+      <Children parentId={row.order_id} cfg={{
+        table: 'order_items', pk: 'order_item_id', parentKey: 'order_id', title: 'Items on this order',
+        select: '*,products(public_product_name)',
+        columns: [
+          { key: 'products.public_product_name', label: 'Product' },
+          { key: 'quantity', label: 'Qty', num: true },
+          { key: 'unit_price', label: 'Unit', fmt: 'money', num: true },
+        ],
+        fields: [
+          { name: 'product_id', label: 'Product', required: true, width: 190,
+            lookup: { table: 'products', pk: 'product_id', label: 'public_product_name' } },
+          { name: 'quantity', label: 'Qty', type: 'number', width: 70 },
+          { name: 'unit_price', label: 'Unit price', type: 'number', step: '0.01', width: 110, required: true },
+        ],
+      }} />),
     fields: [
       { name: 'order_number', label: 'Order number', placeholder: 'USY-1046' },
       { name: 'contact_id', label: 'Customer', lookup: { table: 'contacts', pk: 'contact_id', label: 'full_name' } },
