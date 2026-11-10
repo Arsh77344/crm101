@@ -1,70 +1,48 @@
-import Link from 'next/link';
-import { supabaseServer } from '@/lib/supabase';
-import { Page, Badge, money, Empty } from '@/components/ui';
-import Flash from '@/components/Flash';
+'use client';
+import CrudPage from '@/components/CrudPage';
+import { money } from '@/components/ui';
 
-export const dynamic = 'force-dynamic';
-
-export default async function Products({ searchParams }) {
-  const sb = supabaseServer();
-  const q = searchParams?.q || '';
-  const status = searchParams?.status || '';
-
-  let query = sb.from('products').select('*').order('created_at', { ascending: false });
-  if (q) query = query.or(`public_product_name.ilike.%${q}%,internal_sku.ilike.%${q}%,colour.ilike.%${q}%,fabric.ilike.%${q}%`);
-  if (status) query = query.eq('status', status);
-  const { data: rows = [], error } = await query;
-
-  const tabs = ['', 'Draft', 'Review', 'Published', 'Archived'];
-  return (
-    <Page title="Products" sub={`${rows.length} piece${rows.length === 1 ? '' : 's'} in the catalogue`}
-      actions={<Link className="btn btn-primary" href="/products/new">New product</Link>}>
-      <Flash params={searchParams} />
-      {error && <div className="note warn">{error.message}</div>}
-
-      <form className="toolbar">
-        <div className="search"><span className="mag">⌕</span>
-          <input name="q" defaultValue={q} placeholder="Search name, SKU, colour, fabric…" /></div>
-        {status && <input type="hidden" name="status" value={status} />}
-        <button className="btn btn-sm">Search</button>
-        <span className="spacer" />
-        {tabs.map((t) => (
-          <Link key={t || 'all'} className={`chip ${status === t ? 'on' : ''}`}
-            href={`/products${t ? `?status=${t}` : ''}`}>{t || 'All'}</Link>
-        ))}
-      </form>
-
-      <div className="card">
-        {rows.length === 0 ? (
-          <Empty title="No products here" hint="Add your first piece, or change the filter.">
-            <Link className="btn btn-primary" href="/products/new">New product</Link>
-          </Empty>
-        ) : (
-          <div className="t-wrap"><table className="table">
-            <thead><tr>
-              <th></th><th>Product</th><th>SKU</th><th>Fabric</th>
-              <th className="num">Retail</th><th className="num">Wholesale</th><th className="num">Stock</th><th>Status</th>
-            </tr></thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.product_id}>
-                  <td><div className="thumb">{(p.colour || '—').slice(0, 3)}</div></td>
-                  <td>
-                    <Link className="link" href={`/products/${p.product_id}`}>{p.public_product_name}</Link>
-                    <div className="small faint">{p.colour}{p.weave_or_motif ? ` · ${p.weave_or_motif}` : ''}</div>
-                  </td>
-                  <td className="mono">{p.internal_sku || '—'}</td>
-                  <td className="small">{p.fabric || '—'}</td>
-                  <td className="num">{money(p.retail_price, p.currency)}</td>
-                  <td className="num">{money(p.wholesale_price, p.currency)}</td>
-                  <td className="num">{p.stock_qty ?? 0}</td>
-                  <td><Badge>{p.status}</Badge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
-        )}
-      </div>
-    </Page>
-  );
+export default function Products() {
+  return <CrudPage cfg={{
+    table: 'products', pk: 'product_id', title: 'Products', singular: 'product',
+    sub: (r) => `${r.length} pieces in the catalogue · ${r.filter((p) => p.status === 'Published').length} live`,
+    order: ['created_at', false],
+    search: ['public_product_name', 'internal_sku', 'colour', 'fabric', 'tags'],
+    searchHint: 'Search name, SKU, colour, fabric…',
+    filter: { col: 'status', values: ['Draft', 'Review', 'Published', 'Archived'] },
+    emptyTitle: 'No products here', emptyHint: 'Add your first piece, or clear the filter.',
+    kpis: (r) => [
+      { label: 'Live', value: r.filter((p) => p.status === 'Published').length },
+      { label: 'In stock', value: r.reduce((s, p) => s + (p.stock_qty || 0), 0), delta: 'pieces across the catalogue' },
+      { label: 'Catalogue value', value: money(r.reduce((s, p) => s + (p.retail_price || 0) * (p.stock_qty || 0), 0)), delta: 'at retail' },
+      { label: 'Out of stock', value: r.filter((p) => !p.stock_qty).length },
+    ],
+    columns: [
+      { key: 'public_product_name', label: 'Product' },
+      { key: 'internal_sku', label: 'SKU' },
+      { key: 'fabric', label: 'Fabric' },
+      { key: 'retail_price', label: 'Retail', fmt: 'money', num: true },
+      { key: 'wholesale_price', label: 'Wholesale', fmt: 'money', num: true },
+      { key: 'stock_qty', label: 'Stock', num: true },
+      { key: 'status', label: 'Status', fmt: 'badge' },
+    ],
+    fields: [
+      { name: 'public_product_name', label: 'Product name', required: true },
+      { name: 'internal_sku', label: 'SKU', placeholder: 'USY-MS-001' },
+      { name: 'category', label: 'Category', placeholder: 'Banarasi Saree' },
+      { name: 'fabric', label: 'Fabric', placeholder: 'Mashru Satin Silk' },
+      { name: 'colour', label: 'Colour' },
+      { name: 'weave_or_motif', label: 'Weave or motif', placeholder: 'Jangla floral' },
+      { name: 'description', label: 'Description', type: 'textarea' },
+      { name: 'tags', label: 'Tags', placeholder: 'wedding, silk, handloom' },
+      { name: 'cost_price', label: 'Cost price', type: 'number', step: '0.01' },
+      { name: 'retail_price', label: 'Retail price', type: 'number', step: '0.01' },
+      { name: 'wholesale_price', label: 'Wholesale price', type: 'number', step: '0.01' },
+      { name: 'currency', label: 'Currency', options: ['INR', 'USD', 'GBP', 'EUR'] },
+      { name: 'stock_qty', label: 'Stock quantity', type: 'number' },
+      { name: 'moq', label: 'Minimum order quantity', type: 'number' },
+      { name: 'status', label: 'Status', options: ['Draft', 'Review', 'Published', 'Archived'],
+        hint: 'Published pieces can appear in showrooms and on the storefront.' },
+    ],
+  }} />;
 }

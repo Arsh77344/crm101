@@ -1,13 +1,20 @@
 # Commerce Business OS
 
-Products, customers, campaigns and launches for a handloom D2C brand.
-Rebuilt in JavaScript: Next.js (App Router) + Supabase (Postgres, auth, storage), deployed on Vercel.
+One workspace for a handloom D2C brand: products, customers, orders, fulfilment,
+campaigns, the people who weave the pieces, and the money.
+
+Static Next.js front end + Supabase (Postgres, auth, row level security).
+Deployed to GitHub Pages; no server to run or pay for.
 
 ## Screens
-Dashboard · Products · Product launch desk · Orders · Showrooms (with a public buyer page)
-Contacts · Companies · Pipeline · Activities
-Campaigns (audience + content plan) · Content calendar · Performance · Consent centre
-Integrations · Team & roles · Settings
+**Sell** — dashboard, products, product launch desk, orders, showrooms (with a public buyer page)
+**Fulfil** — shipments, payments, returns and exchanges
+**Customers** — contacts, companies, pipeline, activities
+**Marketing** — campaigns (audience + content plan), content calendar, performance, consent centre
+**Make & spend** — weavers and suppliers, expenses, profit and loss
+**Run** — tasks, automations, integrations, team and roles, settings
+
+Light and dark mode, switched from the bottom of the sidebar.
 
 ## Roles
 - **owner** — everything, including roles and settings
@@ -15,19 +22,16 @@ Integrations · Team & roles · Settings
 - **sales** — create and edit records; cannot delete or change settings
 
 The first account created becomes the Owner. Everyone after arrives as Sales and is promoted from Team & roles.
+Roles are enforced by Postgres row level security, not only by the interface.
 
 ## Environment
     NEXT_PUBLIC_SUPABASE_URL=...
     NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+    NEXT_PUBLIC_BASE_PATH=/crm101   # only when served from a repo subpath
 
-API keys for Wix, Instagram, WhatsApp, OpenAI and the rest belong in the deployment's
-environment settings, never in the database.
-
-## Database
-Apply in order against the Supabase project:
-1. `supabase/0001_schema.sql` — tables
-2. `supabase/0002_policies.sql` — row level security
-3. `supabase/0003_demo.sql` — demo content (safe to delete later)
+The anon key is public by design; the database is protected by row level security.
+API keys for Wix, Instagram, WhatsApp, Razorpay, Shiprocket and the rest belong in
+the deployment environment, never in the database.
 
 ## Local
     npm install && npm run dev

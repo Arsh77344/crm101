@@ -179,3 +179,51 @@ input,select,textarea,button{font:inherit;color:inherit}
   .form-grid{grid-template-columns:1fr}
   .content,.topbar{padding-left:16px;padding-right:16px}
 }
+
+/* ---- dark mode ---- */
+[data-theme="dark"]{
+  --ink:#120e16;
+  --ink-soft:#1b1522;
+  --canvas:#15111a;
+  --card:#1d1825;
+  --line:#2e2738;
+  --line-soft:#262030;
+  --text:#ece7f1;
+  --muted:#a79fb4;
+  --faint:#7d7389;
+  --accent:#e0719f;
+  --accent-soft:#3a1f2e;
+  --gold:#d9b05f;
+  --gold-soft:#3a3020;
+  --green:#79cfa5; --green-soft:#1e3a2c;
+  --amber:#e2bb6a; --amber-soft:#3a3120;
+  --red:#ef9393;  --red-soft:#3d2224;
+  --blue:#8fb8e8; --blue-soft:#1f2c3d;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.22);
+}
+[data-theme="dark"] .sidebar{background:var(--ink);color:#d9d2e2}
+[data-theme="dark"] .nav a{color:#b4aac2}
+[data-theme="dark"] .card-foot{background:#221c2b}
+[data-theme="dark"] .table tbody tr:hover{background:#241e2e}
+[data-theme="dark"] .col{background:#201a29}
+[data-theme="dark"] .cal .dow{background:#241e2e}
+[data-theme="dark"] .cal .day{background:var(--card)}
+[data-theme="dark"] .cal .day.out{background:#1a1521}
+[data-theme="dark"] .field input,[data-theme="dark"] .field select,[data-theme="dark"] .field textarea,
+[data-theme="dark"] .search input,[data-theme="dark"] .chip{background:#241e2e;color:var(--text)}
+[data-theme="dark"] .btn{background:#241e2e}
+[data-theme="dark"] .btn:hover{background:#2c2537;border-color:#3b3348}
+[data-theme="dark"] .btn-primary{background:var(--accent);border-color:var(--accent);color:#2a1020}
+[data-theme="dark"] .btn-primary:hover{background:#ec84ae;border-color:#ec84ae}
+[data-theme="dark"] .thumb{background:linear-gradient(140deg,#2b2435,#342a40)}
+[data-theme="dark"] .auth{background:
+  radial-gradient(1100px 500px at 15% -10%, #2a1a26 0%, transparent 60%),
+  radial-gradient(900px 500px at 100% 0%, #2a2318 0%, transparent 55%), var(--canvas)}
+[data-theme="dark"] .note{background:var(--gold-soft);color:#e8d5a4;border-color:#4a3d25}
+
+.theme-btn{background:none;border:0;color:#9b8fa4;cursor:pointer;font-size:12px;padding:4px 0}
+.theme-btn:hover{color:#fff}
+.loading{padding:40px;text-align:center;color:var(--muted);font-size:13.5px}
+.panel{position:sticky;top:18px}
+.pill-row{display:flex;gap:6px;flex-wrap:wrap}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}

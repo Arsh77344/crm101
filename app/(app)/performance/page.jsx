@@ -1,32 +1,38 @@
-import { supabaseServer } from '@/lib/supabase';
-import { Page, Stat, money, Badge } from '@/components/ui';
-export const dynamic = 'force-dynamic';
+'use client';
+import { useQuery } from '@/lib/db';
+import { Page, Stat, Badge, Loading, ErrorNote, money } from '@/components/ui';
 
-export default async function Performance() {
-  const sb = supabaseServer();
-  const [camps, members, posts, orders] = await Promise.all([
-    sb.from('campaigns').select('*').then((r) => r.data || []),
-    sb.from('campaign_members').select('campaign_id,member_status').then((r) => r.data || []),
-    sb.from('campaign_posts').select('campaign_id,status,channel').then((r) => r.data || []),
-    sb.from('orders').select('total,order_status,ordered_at').then((r) => r.data || []),
-  ]);
+export default function Performance() {
+  const q = useQuery(async (c) => {
+    const [camps, members, posts, payments] = await Promise.all([
+      c.from('campaigns').select('*'),
+      c.from('campaign_members').select('campaign_id,member_status'),
+      c.from('campaign_posts').select('campaign_id,status,channel'),
+      c.from('payments').select('amount,status'),
+    ]);
+    if (camps.error) throw camps.error;
+    return { camps: camps.data || [], members: members.data || [], posts: posts.data || [], payments: payments.data || [] };
+  }, []);
 
-  const spend = camps.reduce((s, c) => s + Number(c.spend || 0), 0);
-  const revenue = orders.filter((o) => ['Fulfilled', 'Processing'].includes(o.order_status))
-    .reduce((s, o) => s + Number(o.total || 0), 0);
-  const reached = members.filter((m) => m.member_status !== 'Planned').length;
+  if (q.loading) return <Page title="Marketing performance"><Loading /></Page>;
+  if (q.error) return <Page title="Marketing performance"><ErrorNote error={q.error} /></Page>;
+  const d = q.data;
 
+  const spend = d.camps.reduce((s, c) => s + Number(c.spend || 0), 0);
+  const revenue = d.payments.filter((p) => ['Paid', 'Settled'].includes(p.status))
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const reached = d.members.filter((m) => m.member_status !== 'Planned').length;
   const byChannel = {};
-  posts.forEach((p) => { byChannel[p.channel] = (byChannel[p.channel] || 0) + 1; });
+  d.posts.forEach((p) => { byChannel[p.channel] = (byChannel[p.channel] || 0) + 1; });
   const maxCh = Math.max(1, ...Object.values(byChannel));
 
   return (
     <Page title="Marketing performance" sub="What the campaigns cost and what they touched.">
-      <div className="grid g4" style={{ marginBottom: 18 }}>
-        <Stat label="Total spend" value={money(spend)} delta={`${camps.length} campaigns`} />
-        <Stat label="Revenue booked" value={money(revenue)} delta="Fulfilled and processing orders" />
+      <div className="kpi-row" style={{ marginBottom: 18 }}>
+        <Stat label="Total spend" value={money(spend)} delta={`${d.camps.length} campaigns`} />
+        <Stat label="Revenue collected" value={money(revenue)} delta="All payments marked paid" />
         <Stat label="Return on spend" value={spend ? `${(revenue / spend).toFixed(1)}×` : '—'} delta="Revenue ÷ campaign spend" />
-        <Stat label="People reached" value={reached} delta={`${members.length} in audiences`} />
+        <Stat label="People reached" value={reached} delta={`${d.members.length} in audiences`} />
       </div>
 
       <div className="grid g2">
@@ -35,16 +41,16 @@ export default async function Performance() {
           <div className="t-wrap"><table className="table">
             <thead><tr><th>Campaign</th><th className="num">Audience</th><th className="num">Posts</th>
               <th className="num">Budget</th><th className="num">Spend</th><th>Status</th></tr></thead>
-            <tbody>{camps.map((c) => (
+            <tbody>{d.camps.map((c) => (
               <tr key={c.campaign_id}>
                 <td>{c.campaign_name}<div className="small faint">{c.channel}</div></td>
-                <td className="num">{members.filter((m) => m.campaign_id === c.campaign_id).length}</td>
-                <td className="num">{posts.filter((p) => p.campaign_id === c.campaign_id).length}</td>
+                <td className="num">{d.members.filter((m) => m.campaign_id === c.campaign_id).length}</td>
+                <td className="num">{d.posts.filter((p) => p.campaign_id === c.campaign_id).length}</td>
                 <td className="num">{money(c.budget)}</td>
                 <td className="num">{money(c.spend)}</td>
                 <td><Badge>{c.status}</Badge></td>
               </tr>))}
-              {camps.length === 0 && <tr><td colSpan="6" className="small muted">No campaigns yet.</td></tr>}
+              {d.camps.length === 0 && <tr><td colSpan="6" className="small muted">No campaigns yet.</td></tr>}
             </tbody></table></div>
         </div>
 

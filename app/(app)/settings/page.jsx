@@ -1,49 +1,60 @@
-import { supabaseServer, currentUser, canManage } from '@/lib/supabase';
-import { quickUpdate } from '@/lib/actions';
-import { Page } from '@/components/ui';
-import Flash from '@/components/Flash';
-export const dynamic = 'force-dynamic';
+'use client';
+import { useState } from 'react';
+import { useQuery, updateRow } from '@/lib/db';
+import { useSession, canManage } from '@/lib/session';
+import { Page, Loading, ErrorNote } from '@/components/ui';
 
 const LABELS = {
-  brand_name: 'Brand name',
-  brand_tagline: 'Tagline',
-  default_currency: 'Default currency',
-  storefront_url: 'Storefront address',
+  brand_name: 'Brand name', brand_tagline: 'Tagline',
+  default_currency: 'Default currency', storefront_url: 'Storefront address',
 };
 
-export default async function Settings({ searchParams }) {
-  const sb = supabaseServer();
-  const user = await currentUser();
-  const manager = canManage(user.profile?.role);
-  const { data: rows = [] } = await sb.from('settings').select('*').order('setting_key');
-  const update = quickUpdate.bind(null, 'settings', 'setting_key', '/settings');
+export default function Settings() {
+  const { user, profile } = useSession();
+  const manager = canManage(profile?.role);
+  const [err, setErr] = useState('');
+  const [saved, setSaved] = useState('');
+  const q = useQuery(async (c) => {
+    const { data, error } = await c.from('settings').select('*').order('setting_key');
+    if (error) throw error;
+    return data || [];
+  }, []);
+
+  async function save(e, key) {
+    e.preventDefault();
+    const value = new FormData(e.target).get('setting_value');
+    try { await updateRow('settings', 'setting_key', key, { setting_value: value }); setSaved(key); q.reload(); }
+    catch (e2) { setErr(e2.message); }
+  }
 
   return (
     <Page title="Settings" sub="Brand details used across listings, showrooms and campaigns.">
-      <Flash params={searchParams} />
+      <ErrorNote error={q.error || err} />
       {!manager && <div className="note warn" style={{ marginBottom: 16 }}>Only an Owner or Admin can change settings.</div>}
       <div className="grid g2">
         <div className="card">
           <div className="card-head"><h3>Workspace</h3></div>
           <div className="card-body stack">
-            {rows.map((s) => (
-              <form action={update} key={s.setting_key} className="field" style={{ marginBottom: 0 }}>
+            {q.loading ? <Loading /> : (q.data || []).map((s) => (
+              <form key={s.setting_key} className="field" style={{ marginBottom: 0 }} onSubmit={(e) => save(e, s.setting_key)}>
                 <label>{LABELS[s.setting_key] || s.setting_key}</label>
-                <input type="hidden" name="_id" value={s.setting_key} />
                 <div className="row" style={{ gap: 8 }}>
                   <input name="setting_value" defaultValue={s.setting_value || ''} disabled={!manager} />
-                  {manager && <button className="btn btn-sm">Save</button>}
+                  {manager && <button className="btn btn-sm">{saved === s.setting_key ? 'Saved' : 'Save'}</button>}
                 </div>
               </form>))}
-            {rows.length === 0 && <div className="small muted">No settings recorded.</div>}
           </div>
         </div>
         <div className="card">
           <div className="card-head"><h3>Your account</h3></div>
           <div className="card-body stack" style={{ gap: 8 }}>
-            <div className="row"><span className="muted small">Signed in as</span><span className="spacer" />{user.email}</div>
-            <div className="row"><span className="muted small">Name</span><span className="spacer" />{user.profile?.full_name || '—'}</div>
-            <div className="row"><span className="muted small">Role</span><span className="spacer" style={{ textTransform: 'capitalize' }} />{user.profile?.role}</div>
+            <div className="row"><span className="muted small">Signed in as</span><span className="spacer" />{user?.email}</div>
+            <div className="row"><span className="muted small">Name</span><span className="spacer" />{profile?.full_name || '—'}</div>
+            <div className="row"><span className="muted small">Role</span><span className="spacer" />
+              <span style={{ textTransform: 'capitalize' }}>{profile?.role}</span></div>
+            <div className="small faint" style={{ marginTop: 6 }}>
+              Switch between light and dark from the bottom of the sidebar.
+            </div>
           </div>
         </div>
       </div>

@@ -1,66 +1,45 @@
-import Link from 'next/link';
-import { supabaseServer } from '@/lib/supabase';
-import { Page, Badge, Empty, when } from '@/components/ui';
-import Flash from '@/components/Flash';
+'use client';
+import CrudPage from '@/components/CrudPage';
 
-export const dynamic = 'force-dynamic';
-const STAGES = ['', 'New', 'Lead', 'Opportunity', 'Customer', 'Dormant'];
-
-export default async function Contacts({ searchParams }) {
-  const sb = supabaseServer();
-  const q = searchParams?.q || '';
-  const stage = searchParams?.stage || '';
-  const type = searchParams?.type || '';
-
-  let query = sb.from('contacts').select('*').order('created_at', { ascending: false }).limit(500);
-  if (q) query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone_number.ilike.%${q}%,business_category.ilike.%${q}%`);
-  if (stage) query = query.eq('lifecycle_stage', stage);
-  if (type) query = query.eq('contact_type', type);
-  const { data: rows = [], error } = await query;
-
-  return (
-    <Page title="Contacts" sub={`${rows.length} people in the book`}
-      actions={<Link className="btn btn-primary" href="/contacts/new">New contact</Link>}>
-      <Flash params={searchParams} />
-      {error && <div className="note warn">{error.message}</div>}
-
-      <form className="toolbar">
-        <div className="search"><span className="mag">⌕</span>
-          <input name="q" defaultValue={q} placeholder="Search name, email, phone…" /></div>
-        <select name="type" defaultValue={type} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)' }}>
-          <option value="">All types</option><option>B2B</option><option>B2C</option><option>Both</option>
-        </select>
-        <button className="btn btn-sm">Filter</button>
-        <span className="spacer" />
-        {STAGES.map((s) => (
-          <Link key={s || 'all'} className={`chip ${stage === s ? 'on' : ''}`}
-            href={`/contacts${s ? `?stage=${s}` : ''}`}>{s || 'All'}</Link>
-        ))}
-      </form>
-
-      <div className="card">
-        {rows.length === 0 ? (
-          <Empty title="No contacts match" hint="Try a different filter, or add someone new.">
-            <Link className="btn btn-primary" href="/contacts/new">New contact</Link>
-          </Empty>
-        ) : (
-          <div className="t-wrap"><table className="table">
-            <thead><tr><th>Name</th><th>Type</th><th>Stage</th><th>Contact</th><th>Country</th>
-              <th className="num">Score</th><th>Added</th></tr></thead>
-            <tbody>{rows.map((c) => (
-              <tr key={c.contact_id}>
-                <td><Link className="link" href={`/contacts/${c.contact_id}`}>{c.full_name || 'Unnamed'}</Link>
-                  <div className="small faint">{c.business_category || c.niche || ''}</div></td>
-                <td className="small">{c.contact_type}</td>
-                <td><Badge>{c.lifecycle_stage}</Badge></td>
-                <td className="small">{c.email || '—'}<div className="faint">{c.phone_number || ''}</div></td>
-                <td className="small">{c.country || '—'}</td>
-                <td className="num">{c.lead_score ?? 0}</td>
-                <td className="small faint">{when(c.created_at)}</td>
-              </tr>))}
-            </tbody></table></div>
-        )}
-      </div>
-    </Page>
-  );
+export default function Contacts() {
+  return <CrudPage cfg={{
+    table: 'contacts', pk: 'contact_id', title: 'Contacts', singular: 'contact',
+    sub: (r) => `${r.length} people · ${r.filter((c) => c.lifecycle_stage === 'Customer').length} customers`,
+    order: ['created_at', false],
+    search: ['full_name', 'email', 'phone_number', 'business_category', 'country'],
+    searchHint: 'Search name, email, phone, country…',
+    filter: { col: 'lifecycle_stage', values: ['New', 'Lead', 'Opportunity', 'Customer', 'Dormant'] },
+    emptyTitle: 'No contacts match', emptyHint: 'Try another filter, or add someone new.',
+    kpis: (r) => [
+      { label: 'Customers', value: r.filter((c) => c.lifecycle_stage === 'Customer').length },
+      { label: 'Open leads', value: r.filter((c) => ['Lead', 'Opportunity'].includes(c.lifecycle_stage)).length },
+      { label: 'Wholesale', value: r.filter((c) => c.contact_type === 'B2B').length, delta: 'B2B contacts' },
+      { label: 'Need review', value: r.filter((c) => c.qualification_status === 'Unreviewed').length },
+    ],
+    columns: [
+      { key: 'full_name', label: 'Name' },
+      { key: 'contact_type', label: 'Type' },
+      { key: 'lifecycle_stage', label: 'Stage', fmt: 'badge' },
+      { key: 'email', label: 'Email' },
+      { key: 'phone_number', label: 'Phone' },
+      { key: 'country', label: 'Country' },
+      { key: 'lead_score', label: 'Score', num: true },
+    ],
+    fields: [
+      { name: 'full_name', label: 'Full name', required: true },
+      { name: 'contact_type', label: 'Type', options: ['B2C', 'B2B', 'Both', 'Unknown'] },
+      { name: 'email', label: 'Email', type: 'email' },
+      { name: 'phone_number', label: 'Phone' },
+      { name: 'country', label: 'Country' },
+      { name: 'business_category', label: 'Business category', placeholder: 'Boutique, Distributor, Individual' },
+      { name: 'lifecycle_stage', label: 'Lifecycle stage', options: ['New', 'Lead', 'Opportunity', 'Customer', 'Dormant'] },
+      { name: 'qualification_status', label: 'Qualification', options: ['Unreviewed', 'Qualified', 'Disqualified', 'On hold'] },
+      { name: 'lead_score', label: 'Lead score', type: 'number' },
+      { name: 'next_follow_up', label: 'Next follow up', type: 'date' },
+      { name: 'source_name', label: 'Source', placeholder: 'Instagram DM, Trade fair' },
+      { name: 'website', label: 'Instagram or website' },
+      { name: 'relevance_reason', label: 'Notes', type: 'textarea',
+        hint: 'Why they matter, what they buy, what to remember.' },
+    ],
+  }} />;
 }

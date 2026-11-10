@@ -1,3 +1,4 @@
+'use client';
 export function money(n, currency = 'INR') {
   if (n === null || n === undefined || n === '') return '—';
   const v = Number(n);
@@ -5,7 +6,6 @@ export function money(n, currency = 'INR') {
   const sym = { INR: '₹', USD: '$', GBP: '£', EUR: '€' }[currency] || '';
   return sym + v.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
-
 export function when(d, withTime = false) {
   if (!d) return '—';
   const dt = new Date(d);
@@ -15,22 +15,24 @@ export function when(d, withTime = false) {
     ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
   });
 }
-
 const TONE = {
-  Published: 'b-green', Fulfilled: 'b-green', Won: 'b-green', Connected: 'b-green',
-  OptedIn: 'b-green', Allowed: 'b-green', Approved: 'b-green', Running: 'b-green', Done: 'b-green', Customer: 'b-green',
-  Review: 'b-amber', Processing: 'b-amber', Negotiation: 'b-amber', Scheduled: 'b-amber',
-  'Pending Payment': 'b-amber', Blocked: 'b-amber', Queued: 'b-amber', Paused: 'b-amber',
-  Draft: '', Idea: '', Unknown: '', New: 'b-blue', Lead: 'b-blue', Qualified: 'b-blue',
-  Proposal: 'b-blue', Opportunity: 'b-blue', Configured: 'b-blue',
-  Lost: 'b-red', Failed: 'b-red', Error: 'b-red', OptedOut: 'b-red', DoNotContact: 'b-red', Cancelled: 'b-red',
-  Archived: '', Disconnected: '', Completed: 'b-blue',
+  Published: 'b-green', Fulfilled: 'b-green', Won: 'b-green', Connected: 'b-green', Delivered: 'b-green',
+  OptedIn: 'b-green', Allowed: 'b-green', Approved: 'b-green', Running: 'b-green', Done: 'b-green',
+  Customer: 'b-green', Paid: 'b-green', Settled: 'b-green', Active: 'b-green', Received: 'b-green',
+  Review: 'b-amber', Processing: 'b-amber', Negotiation: 'b-amber', Scheduled: 'b-amber', Doing: 'b-amber',
+  'Pending Payment': 'b-amber', Blocked: 'b-amber', Queued: 'b-amber', Paused: 'b-amber', 'Link sent': 'b-amber',
+  'In transit': 'b-amber', 'Out for delivery': 'b-amber', 'On loom': 'b-amber', Finishing: 'b-amber', Exchange: 'b-amber',
+  Draft: '', Idea: '', Unknown: '', 'To do': '', 'Not booked': '', Pending: '', Normal: '', Low: '',
+  New: 'b-blue', Lead: 'b-blue', Qualified: 'b-blue', Proposal: 'b-blue', Opportunity: 'b-blue',
+  Configured: 'b-blue', Completed: 'b-blue', Booked: 'b-blue', 'Picked up': 'b-blue', Created: 'b-blue',
+  Commissioned: 'b-blue', High: 'b-amber', Urgent: 'b-red',
+  Lost: 'b-red', Failed: 'b-red', Error: 'b-red', OptedOut: 'b-red', DoNotContact: 'b-red',
+  Cancelled: 'b-red', RTO: 'b-red', Refunded: 'b-red', Rejected: 'b-red', Archived: '', Disconnected: '',
 };
 export function Badge({ children }) {
-  if (!children) return <span className="faint">—</span>;
+  if (children === null || children === undefined || children === '') return <span className="faint">—</span>;
   return <span className={`badge ${TONE[children] ?? ''}`}>{children}</span>;
 }
-
 export function Stat({ label, value, delta }) {
   return (
     <div className="card stat">
@@ -40,7 +42,6 @@ export function Stat({ label, value, delta }) {
     </div>
   );
 }
-
 export function Empty({ title, hint, children }) {
   return (
     <div className="empty">
@@ -50,22 +51,22 @@ export function Empty({ title, hint, children }) {
     </div>
   );
 }
-
 export function Page({ title, sub, actions, children }) {
   return (
     <>
       <div className="topbar">
-        <div>
-          <h1 className="page-title">{title}</h1>
-          {sub && <div className="page-sub">{sub}</div>}
-        </div>
+        <div><h1 className="page-title">{title}</h1>{sub && <div className="page-sub">{sub}</div>}</div>
         <div className="row">{actions}</div>
       </div>
       <div className="content">{children}</div>
     </>
   );
 }
-
 export function initials(name = '') {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  return (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+}
+export function Loading() { return <div className="loading">Loading…</div>; }
+export function ErrorNote({ error }) {
+  if (!error) return null;
+  return <div className="note warn" style={{ marginBottom: 14 }}>{error}</div>;
 }
