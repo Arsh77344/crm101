@@ -443,7 +443,8 @@ class App(LaunchPages,V37BusinessPages,V27MarketingPages,ProcessOrchestratorPage
         return self._parsed_form
 
     def do_GET(self):
-        if not self.allowed_host():return
+        # Hosting platforms probe /health with an internal Host header; it returns no private data.
+        if urllib.parse.urlparse(self.path).path!='/health' and not self.allowed_host():return
         p=urllib.parse.urlparse(self.path);q=urllib.parse.parse_qs(p.query);self.q=q
         if re.fullmatch(r'/webhooks/meta/[^/]+',p.path):
             try:

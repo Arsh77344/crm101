@@ -12,6 +12,8 @@ services:
         value: 3.12.8
       - key: BIND_HOST
         value: 0.0.0.0
+      - key: PUBLIC_BASE_URL
+        value: https://commerce-business-os.onrender.com
       - key: COOKIE_SECURE
         value: "1"
       - key: TRUST_PROXY
