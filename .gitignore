@@ -1,0 +1,36 @@
+# Python build and test artefacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+data/FIRST_RUN_CREDENTIALS.txt
+data/.commerce_business_os.lock
+data/config/*
+!data/config/README.txt
+
+# Runtime data (the checked-in sample database remains available)
+data/*.sqlite
+!data/sample_test_database.sqlite
+data/backups/*
+!data/backups/README.txt
+data/diagnostics/*
+!data/diagnostics/README.txt
+data/logs/*
+!data/logs/README.txt
+data/product_inbox/*
+!data/product_inbox/README.txt
+data/static/
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,22 @@
+/* V34: owner signal quality and workflow clarity */
+.qc-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+.qc-run{align-items:end;gap:12px;flex-wrap:wrap}
+.qc-run .field{min-width:min(560px,100%)}
+.qc-table{min-width:980px}
+.qc-table th:nth-child(1){width:22%}
+.qc-table th:nth-child(2){width:14%}
+.qc-table th:nth-child(6){width:34%}
+.qc-issues{line-height:1.45;color:var(--text-2,#4d5668)}
+.qc-when{white-space:nowrap;color:var(--muted,#7d8798)}
+.campaign-plan-card .tiny{display:block;margin:.35rem 0 .7rem}
+.readiness-row .btn{white-space:nowrap}
+.deal-board.empty-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;overflow:visible;min-height:0;padding-bottom:8px}
+.deal-board.empty-board .deal-lane{min-width:0;width:auto;min-height:300px;flex:none}
+.deal-board.empty-board .lane-empty{padding:38px 8px}
+@media (max-width:900px){
+  .qc-summary{grid-template-columns:1fr}
+  .deal-board.empty-board{grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}
+}
+@media (max-width:620px){
+  .deal-board.empty-board{grid-template-columns:1fr}
+}
