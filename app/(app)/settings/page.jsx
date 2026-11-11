@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useQuery, updateRow } from '@/lib/db';
+import { useQuery, updateRow, sb } from '@/lib/db';
 import { useSession, canManage } from '@/lib/session';
 import { Page, Loading, ErrorNote } from '@/components/ui';
 
@@ -14,6 +14,7 @@ export default function Settings() {
   const manager = canManage(profile?.role);
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState('');
+  const [pwMsg, setPwMsg] = useState('');
   const q = useQuery(async (c) => {
     const { data, error } = await c.from('settings').select('*').order('setting_key');
     if (error) throw error;
@@ -25,6 +26,18 @@ export default function Settings() {
     const value = new FormData(e.target).get('setting_value');
     try { await updateRow('settings', 'setting_key', key, { setting_value: value }); setSaved(key); q.reload(); }
     catch (e2) { setErr(e2.message); }
+  }
+
+  async function changePassword(e) {
+    e.preventDefault();
+    setPwMsg('');
+    const form = new FormData(e.target);
+    const next = form.get('password');
+    if (String(next).length < 8) { setPwMsg('Use at least 8 characters.'); return; }
+    if (next !== form.get('confirm')) { setPwMsg('The two passwords do not match.'); return; }
+    const { error } = await sb().auth.updateUser({ password: next });
+    setPwMsg(error ? error.message : 'Password changed. It applies from your next sign-in.');
+    if (!error) e.target.reset();
   }
 
   return (
@@ -56,6 +69,14 @@ export default function Settings() {
               Switch between light and dark from the bottom of the sidebar.
             </div>
           </div>
+          <form className="card-foot" onSubmit={changePassword}>
+            <div className="field"><label>New password</label>
+              <input name="password" type="password" minLength={8} autoComplete="new-password" required /></div>
+            <div className="field"><label>Confirm new password</label>
+              <input name="confirm" type="password" minLength={8} autoComplete="new-password" required /></div>
+            <button className="btn btn-primary btn-sm">Change password</button>
+            {pwMsg && <div className="small" style={{ marginTop: 8 }}>{pwMsg}</div>}
+          </form>
         </div>
       </div>
     </Page>
