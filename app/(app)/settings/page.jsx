@@ -6,9 +6,29 @@ import { useSession, canManage } from '@/lib/session';
 import { Page, Loading, ErrorNote } from '@/components/ui';
 
 const LABELS = {
-  brand_name: 'Brand name', brand_tagline: 'Tagline',
-  default_currency: 'Default currency', storefront_url: 'Storefront address',
+  brand_name: ['Brand name', 'The name everything is written in the voice of.'],
+  brand_sells: ['What it sells', 'One line. The AI never invents beyond this.'],
+  brand_audience: ['Who buys it', 'Who you are writing to.'],
+  brand_voice: ['How it writes', 'The rules every description and caption follows.'],
+  brand_tagline: ['Tagline', ''],
+  storefront_url: ['Storefront address', ''],
+  default_currency: ['Default currency', ''],
+  whatsapp_number: ['WhatsApp number', 'With country code, digits only. Used for click-to-WhatsApp links.'],
+  ga4_property_id: ['GA4 property ID', 'Numbers only, from GA4 Admin → Property settings.'],
+  looker_embed_url: ['Looker Studio embed link', 'Optional. A report built on GA4 can be shown inside this site.'],
+  guard_quiet_start: ['Quiet hours start', 'No marketing messages after this hour (24h clock).'],
+  guard_quiet_end: ['Quiet hours end', 'Messages may resume from this hour.'],
+  guard_max_marketing_per_week: ['Marketing messages per person per week', 'A hard cap.'],
+  guard_min_hours_between: ['Minimum hours between messages', ''],
 };
+
+const GROUPS = [
+  ['The brand', ['brand_name', 'brand_sells', 'brand_audience', 'brand_voice', 'brand_tagline',
+    'storefront_url', 'default_currency']],
+  ['Messaging', ['whatsapp_number', 'guard_quiet_start', 'guard_quiet_end',
+    'guard_max_marketing_per_week', 'guard_min_hours_between']],
+  ['Analytics', ['ga4_property_id', 'looker_embed_url']],
+];
 
 export default function Settings() {
   const { user, profile } = useSession();
@@ -68,19 +88,42 @@ export default function Settings() {
     <Page title="Settings" sub="Brand details used across listings, showrooms and campaigns.">
       <ErrorNote error={q.error || err} />
       {!manager && <div className="note warn" style={{ marginBottom: 16 }}>Only an Owner or Admin can change settings.</div>}
+      <div className="note" style={{ marginBottom: 16 }}>
+        The brand fields below are what the AI writes from. Nothing is hard coded, and it is told never to
+        invent a fact that is not here or in the photos. Fill these in before generating anything.
+      </div>
+
       <div className="grid g2">
-        <div className="card">
-          <div className="card-head"><h3>Workspace</h3></div>
-          <div className="card-body stack">
-            {q.loading ? <Loading /> : (q.data || []).map((s) => (
-              <form key={s.setting_key} className="field" style={{ marginBottom: 0 }} onSubmit={(e) => save(e, s.setting_key)}>
-                <label>{LABELS[s.setting_key] || s.setting_key}</label>
-                <div className="row" style={{ gap: 8 }}>
-                  <input name="setting_value" defaultValue={s.setting_value || ''} disabled={!manager} />
-                  {manager && <button className="btn btn-sm">{saved === s.setting_key ? 'Saved' : 'Save'}</button>}
-                </div>
-              </form>))}
-          </div>
+        <div className="stack">
+          {q.loading ? <Loading /> : GROUPS.map(([group, keys]) => (
+            <div className="card" key={group}>
+              <div className="card-head"><h3>{group}</h3></div>
+              <div className="card-body stack">
+                {keys.map((key) => {
+                  const row = (q.data || []).find((x) => x.setting_key === key);
+                  if (!row) return null;
+                  const [label, hint] = LABELS[key] || [key, ''];
+                  const long = ['brand_voice', 'brand_sells', 'brand_audience'].includes(key);
+                  return (
+                    <form key={key} className="field" style={{ marginBottom: 0 }} onSubmit={(e) => save(e, key)}>
+                      <label>{label}</label>
+                      {long ? (
+                        <>
+                          <textarea name="setting_value" defaultValue={row.setting_value || ''} disabled={!manager}
+                            style={{ minHeight: key === 'brand_voice' ? 92 : 56 }} />
+                          {manager && <button className="btn btn-sm" style={{ alignSelf: 'flex-start', marginTop: 5 }}>
+                            {saved === key ? 'Saved' : 'Save'}</button>}
+                        </>
+                      ) : (
+                        <div className="row" style={{ gap: 8 }}>
+                          <input name="setting_value" defaultValue={row.setting_value || ''} disabled={!manager} />
+                          {manager && <button className="btn btn-sm">{saved === key ? 'Saved' : 'Save'}</button>}
+                        </div>)}
+                      {hint && <span className="hint">{hint}</span>}
+                    </form>);
+                })}
+              </div>
+            </div>))}
         </div>
         <div className="card">
           <div className="card-head"><h3>Your account</h3></div>

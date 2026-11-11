@@ -14,6 +14,19 @@ export default function Products() {
       <div className="stack">
         <Gallery productId={row.product_id} />
         <Children parentId={row.product_id} cfg={{
+          table: 'product_collections', pk: 'collection_id', pkCols: ['product_id', 'collection_id'],
+          parentKey: 'product_id', title: 'Collections it belongs to',
+          select: '*,collections(name,kind)',
+          columns: [
+            { key: 'collections.name', label: 'Collection' },
+            { key: 'collections.kind', label: 'Kind' },
+          ],
+          fields: [
+            { name: 'collection_id', label: 'Add to collection', required: true, width: 210,
+              lookup: { table: 'collections', pk: 'collection_id', label: 'name' } },
+          ],
+        }} />
+        <Children parentId={row.product_id} cfg={{
           table: 'stock_moves', pk: 'move_id', parentKey: 'product_id',
           title: `Stock ledger — now ${row.stock_qty ?? 0}`, order: 'created_at',
           columns: [

@@ -10,6 +10,23 @@ export default function Contacts() {
     sidePanel: (row) => (
       <div className="stack">
         <Children parentId={row.contact_id} cfg={{
+          table: 'journey_events', pk: 'event_id', parentKey: 'contact_id',
+          title: 'Journey', order: 'occurred_at',
+          columns: [
+            { key: 'occurred_at', label: 'When',
+              render: (r) => new Date(r.occurred_at).toLocaleDateString('en-GB') },
+            { key: 'kind', label: 'What', render: (r) => (r.kind || '').replace(/_/g, ' ') },
+            { key: 'detail', label: 'Detail' },
+          ],
+          fields: [
+            { name: 'kind', label: 'What happened', width: 150,
+              options: ['enquiry', 'whatsapp_in', 'whatsapp_out', 'ig_dm', 'showroom_view', 'return'] },
+            { name: 'detail', label: 'Detail', width: 200 },
+            { name: 'source', label: 'Where', width: 120,
+              options: ['Manual', 'WhatsApp', 'Instagram', 'Website', 'Phone'] },
+          ],
+        }} />
+        <Children parentId={row.contact_id} cfg={{
           table: 'activities', pk: 'activity_id', parentKey: 'contact_id',
           title: 'Activity', order: 'created_at',
           columns: [

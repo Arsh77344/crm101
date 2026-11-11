@@ -11,6 +11,7 @@ const NAV = [
   ['Sell', [
     ['/', 'Dashboard', '◉'],
     ['/products', 'Products', '▣'],
+    ['/collections', 'Collections', '❏'],
     ['/launch', 'Product launch', '✦'],
     ['/orders', 'Orders', '⊞'],
     ['/showrooms', 'Showrooms', '◫'],
@@ -24,12 +25,18 @@ const NAV = [
     ['/contacts', 'Contacts', '◐'],
     ['/companies', 'Companies', '⌂'],
     ['/pipeline', 'Pipeline', '⇄'],
+    ['/journey', 'Customer journey', '◎'],
     ['/activities', 'Activities', '✎'],
   ]],
   ['Marketing', [
     ['/campaigns', 'Campaigns', '◈'],
+    ['/generate', 'Build a campaign', '✧'],
     ['/calendar', 'Content calendar', '▦'],
     ['/performance', 'Performance', '◢'],
+    ['/links', 'Tracked links', '⇗'],
+    ['/templates', 'Message templates', '▤'],
+    ['/broadcasts', 'Broadcasts', '📣'],
+    ['/analytics', 'Website analytics', '◴'],
     ['/consent', 'Consent centre', '⚖'],
   ]],
   ['Make & spend', [
