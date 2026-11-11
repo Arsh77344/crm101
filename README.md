@@ -1,28 +1,45 @@
 # Commerce Business OS
 
-Internal team-test build of a local commerce operations platform.
+One workspace for a handloom D2C brand: products, customers, orders, fulfilment,
+campaigns, the people who weave the pieces, and the money.
 
-The new **Sell → Launch a product** workspace prepares phone photos, brand-aware copy, colour/size variants, market-price suggestions, reviewed store listings and social kits. See [the product launch guide](docs/PRODUCT_LAUNCH.md) for setup, supported connections and validation limits.
+**Live site:** https://arsh77344.github.io/crm101/
 
-## Getting started
+## Branches
 
-Python 3.12 or newer is required. Install the dependencies and run the launcher for your platform:
+| Branch | What is on it |
+| --- | --- |
+| `main` | This readme and the deploy workflow. Pushing here publishes the site. |
+| `commerce-os` | The application: Next.js static front end on Supabase. |
+| `python-legacy` | The original Python build, kept for reference. No longer used. |
 
-```bash
-python3 -m pip install -r app/requirements-team.txt
-./START_APP.sh
-```
+The workflow on `main` checks out `commerce-os`, builds it, and publishes to GitHub Pages.
 
-For macOS, double-click `START_APP.command`; on Windows, run `START_APP.bat`.
+## The app
 
-On the first launch, the app creates `data/FIRST_RUN_CREDENTIALS.txt` locally. It is intentionally excluded from version control.
+Static Next.js talking to Supabase (Postgres, auth, row level security) straight from the
+browser. No server to run or pay for.
 
-See [README_FIRST.md](README_FIRST.md) for build information and [docs/QUICK_START.md](docs/QUICK_START.md) for usage guidance.
+**Sell** — dashboard, products, product launch desk, orders, showrooms with a public buyer page
+**Fulfil** — shipments, payments, returns and exchanges
+**Customers** — contacts, companies, pipeline, activities
+**Marketing** — campaigns with audience and content plan, content calendar, performance, consent centre
+**Make & spend** — weavers and suppliers, expenses, profit and loss
+**Run** — tasks, automations, integrations, team and roles, settings
 
-## Develop and preview on GitHub (Codespaces)
+Light and dark mode, switched from the bottom of the sidebar.
 
-1. On the repo page choose **Code → Codespaces → Create codespace on main**.
-2. The app installs its requirements and starts itself; the **CRM** port (8765) opens in a preview pane beside the editor.
-3. Sign in with the Owner credentials in `data/FIRST_RUN_CREDENTIALS.txt`.
-4. Edit files, then restart with `pkill -f team_start.py; sh START_APP.sh &` and reload the preview.
-5. Commit and push from the Source Control panel. Going live later needs a host (for example Render or Railway) because GitHub Pages cannot run Python.
+## Roles
+
+`owner` · everything, including roles and settings
+`admin` · everything day to day, plus settings and deletes
+`sales` · create and edit records; cannot delete or change settings
+
+The first account created becomes the Owner. Roles are enforced by Postgres row level
+security, not only by the interface.
+
+## Secrets
+
+The Supabase anon key is public by design and the database is protected by row level
+security. API keys for Wix, Instagram, WhatsApp, Razorpay and Shiprocket belong in the
+deployment environment, never in the database.

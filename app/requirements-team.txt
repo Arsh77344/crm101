@@ -1,5 +1,0 @@
-Pillow>=11.0
-pillow-heif>=1.0
-qrcode[pil]>=8.0
-cryptography>=44.0
-mcp>=2.0
