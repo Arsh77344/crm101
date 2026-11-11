@@ -32,6 +32,15 @@ export default function Shipments() {
       { key: 'status', label: 'Status', fmt: 'badge' },
       { key: 'shipping_cost', label: 'Cost', fmt: 'money', num: true },
     ],
+    sheet: [
+      { key: 'courier', label: 'Courier', example: 'Delhivery' },
+      { key: 'awb', label: 'AWB', example: 'DL2984471188' },
+      { key: 'tracking_url', label: 'Tracking link', example: '' },
+      { key: 'status', label: 'Status', example: 'In transit' },
+      { key: 'address_city', label: 'Destination city', example: 'Pune' },
+      { key: 'address_country', label: 'Destination country', example: 'India' },
+      { key: 'shipping_cost', label: 'Courier cost', example: 150 },
+    ],
     fields: [
       { name: 'order_id', label: 'Order', lookup: { table: 'orders', pk: 'order_id', label: 'order_number' } },
       { name: 'courier', label: 'Courier', placeholder: 'Delhivery, Blue Dart, DHL' },

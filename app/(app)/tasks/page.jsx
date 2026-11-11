@@ -25,6 +25,13 @@ export default function Tasks() {
       { key: 'profiles.full_name', label: 'Owner' },
       { key: 'status', label: 'Status', fmt: 'badge' },
     ],
+    sheet: [
+      { key: 'title', label: 'Task', required: true, example: 'Approve the pricing' },
+      { key: 'detail', label: 'Detail', example: '' },
+      { key: 'due_on', label: 'Due on', example: '2026-11-20' },
+      { key: 'priority', label: 'Priority', example: 'High' },
+      { key: 'status', label: 'Status', example: 'To do' },
+    ],
     fields: [
       { name: 'title', label: 'Task', required: true },
       { name: 'detail', label: 'Detail', type: 'textarea' },

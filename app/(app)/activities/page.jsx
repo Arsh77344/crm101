@@ -18,6 +18,13 @@ export default function Activities() {
       { key: 'summary', label: 'What happened' },
       { key: 'follow_up_at', label: 'Follow up', fmt: 'date' },
     ],
+    sheet: [
+      { key: 'activity_type', label: 'Type', example: 'Call' },
+      { key: 'channel', label: 'Channel', example: 'Phone' },
+      { key: 'direction', label: 'Direction', example: 'Outbound' },
+      { key: 'summary', label: 'What happened', required: true, example: 'Discussed pricing' },
+      { key: 'follow_up_at', label: 'Follow up on', example: '2026-11-20' },
+    ],
     fields: [
       { name: 'contact_id', label: 'Contact', lookup: { table: 'contacts', pk: 'contact_id', label: 'full_name' } },
       { name: 'activity_type', label: 'Type', options: ['Note', 'Call', 'Email', 'Meeting', 'WhatsApp', 'Visit'] },

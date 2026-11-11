@@ -26,6 +26,13 @@ export default function Returns() {
       { key: 'resolution', label: 'Resolution', fmt: 'badge' },
       { key: 'opened_on', label: 'Opened', fmt: 'date' },
     ],
+    sheet: [
+      { key: 'reason', label: 'Reason', required: true, example: 'Colour looked different' },
+      { key: 'resolution', label: 'Resolution', example: 'Pending' },
+      { key: 'amount', label: 'Amount', example: 2600 },
+      { key: 'opened_on', label: 'Opened on', example: '2026-11-05' },
+      { key: 'notes', label: 'Notes', example: '' },
+    ],
     fields: [
       { name: 'order_id', label: 'Order', lookup: { table: 'orders', pk: 'order_id', label: 'order_number' } },
       { name: 'contact_id', label: 'Customer', lookup: { table: 'contacts', pk: 'contact_id', label: 'full_name' } },

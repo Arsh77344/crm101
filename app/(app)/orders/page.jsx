@@ -47,6 +47,14 @@ export default function Orders() {
           { name: 'unit_price', label: 'Unit price', type: 'number', step: '0.01', width: 110, required: true },
         ],
       }} />),
+    sheet: [
+      { key: 'order_number', label: 'Order number', required: true, example: 'ORD-1046' },
+      { key: 'order_type', label: 'Type', example: 'B2C' },
+      { key: 'order_status', label: 'Status', example: 'Processing' },
+      { key: 'discount', label: 'Discount', example: 0 },
+      { key: 'shipping', label: 'Shipping', example: 150 },
+      { key: 'external_order_reference', label: 'External reference', example: '' },
+    ],
     fields: [
       { name: 'order_number', label: 'Order number', placeholder: 'USY-1046' },
       { name: 'contact_id', label: 'Customer', lookup: { table: 'contacts', pk: 'contact_id', label: 'full_name' } },

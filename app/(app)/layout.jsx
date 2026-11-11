@@ -45,6 +45,7 @@ const NAV = [
     ['/finance', 'Profit & loss', '◪'],
   ]],
   ['Run', [
+    ['/agents', 'Department agents', '✦'],
     ['/tasks', 'Tasks', '✓'],
     ['/automations', 'Automations', '⟳'],
     ['/integrations', 'Integrations', '⚯'],

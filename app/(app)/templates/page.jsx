@@ -24,6 +24,14 @@ export default function Templates() {
       { key: 'body', label: 'Message' },
       { key: 'provider_status', label: 'Status', fmt: 'badge' },
     ],
+    sheet: [
+      { key: 'name', label: 'Name', required: true, example: 'festive_launch_v1' },
+      { key: 'channel', label: 'Channel', example: 'WhatsApp' },
+      { key: 'category', label: 'Category', example: 'Marketing' },
+      { key: 'language', label: 'Language', example: 'en' },
+      { key: 'body', label: 'Message', example: 'Hello {{1}}' },
+      { key: 'provider_status', label: 'Approval status', example: 'Draft' },
+    ],
     fields: [
       { name: 'name', label: 'Name', required: true, placeholder: 'festive_launch_v1',
         hint: 'Lowercase with underscores, the way the provider wants it.' },

@@ -32,6 +32,14 @@ export default function Payments() {
       { key: 'fee', label: 'Fee', fmt: 'money', num: true },
       { key: 'status', label: 'Status', fmt: 'badge' },
     ],
+    sheet: [
+      { key: 'provider', label: 'Provider', example: 'Razorpay' },
+      { key: 'method', label: 'Method', example: 'UPI' },
+      { key: 'amount', label: 'Amount', required: true, example: 12150 },
+      { key: 'fee', label: 'Gateway fee', example: 239 },
+      { key: 'status', label: 'Status', example: 'Paid' },
+      { key: 'reference', label: 'Reference', example: 'pay_abc123' },
+    ],
     fields: [
       { name: 'order_id', label: 'Order', lookup: { table: 'orders', pk: 'order_id', label: 'order_number' } },
       { name: 'contact_id', label: 'Customer', lookup: { table: 'contacts', pk: 'contact_id', label: 'full_name' } },

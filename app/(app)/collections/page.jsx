@@ -34,6 +34,15 @@ export default function Collections() {
       { key: 'status', label: 'Status', fmt: 'badge' },
       { key: 'sort_order', label: 'Order', num: true },
     ],
+    sheet: [
+      { key: 'name', label: 'Name', required: true, example: 'Festive' },
+      { key: 'slug', label: 'Link name', example: 'festive' },
+      { key: 'kind', label: 'Kind', example: 'Occasion' },
+      { key: 'description', label: 'What it is', example: 'For weddings' },
+      { key: 'story', label: 'The story behind it', example: '' },
+      { key: 'status', label: 'Status', example: 'Active' },
+      { key: 'sort_order', label: 'Sort order', example: 1 },
+    ],
     fields: [
       { name: 'name', label: 'Name', required: true, placeholder: 'Festive' },
       { name: 'slug', label: 'Link name', placeholder: 'festive', hint: 'Used in public links.' },
