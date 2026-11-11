@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, insertRow, sb } from '@/lib/db';
-import { assist } from '@/lib/assist';
+import { assist, PROVIDERS, NO_KEYS, providerLabel, providerOption,
+  providerHint, hasKey } from '@/lib/assist';
 import { Page, Badge, Loading, ErrorNote, money, when } from '@/components/ui';
 
 const CHANNELS = ['Instagram', 'WhatsApp', 'Email', 'Facebook'];
@@ -27,7 +28,7 @@ export default function Generate() {
       c.from('products').select('*,product_images(public_url,is_primary)').order('created_at', { ascending: false }),
       c.from('collections').select('*').eq('status', 'Active').order('sort_order'),
       c.from('product_collections').select('*'),
-      assist({ action: 'health' }).catch(() => ({ openai: false, gemini: false, brand_set: false })),
+      assist({ action: 'health' }).catch(() => ({ ...NO_KEYS, brand_set: false })),
     ]);
     if (products.error) throw products.error;
     return { products: products.data || [], collections: collections.data || [],
@@ -35,7 +36,7 @@ export default function Generate() {
   }, []);
 
   const d = q.data;
-  const keyFor = (p) => (p === 'gemini' ? d?.keys?.gemini : d?.keys?.openai);
+  const keyFor = (p) => hasKey(d?.keys, p);
   const brandSet = d?.keys?.brand_set;
 
   const inCollection = collectionId
@@ -251,9 +252,10 @@ export default function Generate() {
 
               <div className="field"><label>Which model</label>
                 <select value={opts.provider} onChange={(e) => setOpts({ ...opts, provider: e.target.value })}>
-                  <option value="openai">OpenAI (GPT){d.keys && !d.keys.openai ? ' — no key yet' : ''}</option>
-                  <option value="gemini">Google (Gemini){d.keys && !d.keys.gemini ? ' — no key yet' : ''}</option>
-                </select></div>
+                  {PROVIDERS.map(([k]) => (
+                    <option key={k} value={k}>{providerOption(k, d.keys)}</option>))}
+                </select>
+                <span className="hint">{providerHint(opts.provider)}</span></div>
             </div>
             <div className="card-foot">
               <button className="btn btn-primary" style={{ width: '100%' }} onClick={generate}
@@ -263,7 +265,7 @@ export default function Generate() {
               {picked.length === 0 && <div className="small faint" style={{ marginTop: 6 }}>Pick at least one piece.</div>}
               {d.keys && !keyFor(opts.provider) && (
                 <div className="small faint" style={{ marginTop: 6 }}>
-                  No key for {opts.provider === 'gemini' ? 'Gemini' : 'OpenAI'} yet.
+                  No key for {providerLabel(opts.provider)} yet.
                 </div>)}
             </div>
           </div>

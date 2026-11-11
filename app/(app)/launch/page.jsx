@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, insertRow, updateRow } from '@/lib/db';
 import { uploadImage, deleteImage } from '@/lib/upload';
-import { assist, checkKeys } from '@/lib/assist';
+import { assist, checkKeys, PROVIDERS, NO_KEYS, SECRET_NAME,
+  providerLabel, providerOption, providerHint, hasKey, anyKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/components/ui';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
@@ -15,10 +16,6 @@ const IMAGERY = [
   ['Clean', 'Clean cut-outs', 'Same garment, background removed, even lighting.'],
   ['Mannequin', 'AI mannequin', 'Draped on an invisible mannequin. No person.'],
   ['Model', 'AI model', 'Worn by a generated model. Slowest and most expensive.'],
-];
-const PROVIDERS = [
-  ['openai', 'OpenAI (GPT)', 'Strong at copy. Image editing through its image model.'],
-  ['gemini', 'Google (Gemini)', 'Strong at reading photos and at grounded web search for prices.'],
 ];
 
 export default function Launch() {
@@ -42,7 +39,7 @@ export default function Launch() {
   const [research, setResearch] = useState(null);
 
   useEffect(() => {
-    checkKeys().then(setKeys).catch(() => setKeys({ openai: false, gemini: false }));
+    checkKeys().then(setKeys).catch(() => setKeys(NO_KEYS));
   }, []);
 
   const q = useQuery(async (c) => {
@@ -58,8 +55,8 @@ export default function Launch() {
   const ints = q.data?.integrations || [];
   const connected = (name) => ints.some((i) => i.provider === name && i.status === 'Connected');
   const storeReady = connected('Wix') || connected('Shopify');
-  const keyFor = (p) => (p === 'gemini' ? keys?.gemini : keys?.openai);
-  const aiReady = Boolean(keys?.openai || keys?.gemini);
+  const keyFor = (p) => hasKey(keys, p);
+  const aiReady = anyKey(keys);
 
   async function runCopy() {
     setThinking('copy'); setErr('');
@@ -131,7 +128,7 @@ export default function Launch() {
       const note = [
         `${shots.length} photo${shots.length === 1 ? '' : 's'} uploaded.`,
         imagery.mode === 'None' ? 'Using the photos as shot.'
-          : `${imagery.count} × ${imagery.mode.toLowerCase()} images requested via ${imagery.provider === 'openai' ? 'OpenAI' : 'Gemini'}.`,
+          : `${imagery.count} × ${imagery.mode.toLowerCase()} images requested via ${providerLabel(imagery.provider)}.`,
         words.brief ? `Brief: ${words.brief}` : '',
       ].filter(Boolean).join(' ');
       await insertRow('launch_jobs', {
@@ -264,17 +261,18 @@ export default function Launch() {
                       <span className="hint">More images cost more and take longer.</span></div>
                     <div className="field"><label>Which model does the work</label>
                       <select value={imagery.provider} onChange={(e) => setImagery({ ...imagery, provider: e.target.value })}>
-                        {PROVIDERS.map(([k, label]) => (
-                          <option key={k} value={k}>{label}{keys && !keyFor(k) ? ' — no key yet' : ''}</option>))}
+                        {PROVIDERS.map(([k]) => (
+                          <option key={k} value={k}>{providerOption(k, keys)}</option>))}
                       </select>
-                      <span className="hint">{PROVIDERS.find((p) => p[0] === imagery.provider)?.[2]}</span></div>
+                      <span className="hint">{providerHint(imagery.provider)}</span></div>
                   </div>)}
 
                 {keys && !aiReady && (
                   <div className="note" style={{ marginTop: 6 }}>
-                    No AI key is set yet, so your choice is recorded and the job waits. Add
-                    <span className="mono"> OPENAI_API_KEY </span> or <span className="mono"> GEMINI_API_KEY </span>
-                    to this project's Edge Function secrets and it runs.
+                    No AI key is set yet, so your choice is recorded and the job waits. Add any one of
+                    {PROVIDERS.map(([k], i) => (
+                      <span key={k}>{i ? ', ' : ' '}<span className="mono">{SECRET_NAME[k]}</span></span>))}
+                    {' '}to this project's Edge Function secrets and it runs.
                   </div>)}
               </div>
             </>
@@ -302,7 +300,7 @@ export default function Launch() {
                   </button>
                   {keys && !keyFor(imagery.provider) && (
                     <span className="small faint">
-                      No key for {imagery.provider === 'gemini' ? 'Gemini' : 'OpenAI'} yet.
+                      No key for {providerLabel(imagery.provider)} yet.
                     </span>)}
                   {shots.length === 0 && <span className="small faint">The description needs photos.</span>}
                 </div>

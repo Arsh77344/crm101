@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, insertRow } from '@/lib/db';
-import { runAgent } from '@/lib/assist';
+import { runAgent, PROVIDERS, NO_KEYS, providerLabel, providerOption,
+  providerHint, hasKey } from '@/lib/assist';
 import { Page, Badge, Loading, ErrorNote, Empty, when } from '@/components/ui';
 
 const DEPARTMENTS = [
@@ -25,13 +26,13 @@ export default function Agents() {
   const q = useQuery(async (c) => {
     const [runs, keys] = await Promise.all([
       c.from('agent_runs').select('*').order('created_at', { ascending: false }).limit(20),
-      runAgent({ action: 'health' }).catch(() => ({ openai: false, gemini: false })),
+      runAgent({ action: 'health' }).catch(() => NO_KEYS),
     ]);
     return { runs: runs.data || [], keys };
   }, []);
 
   const keys = q.data?.keys;
-  const keyFor = (p) => (p === 'gemini' ? keys?.gemini : keys?.openai);
+  const keyFor = (p) => hasKey(keys, p);
   const meta = DEPARTMENTS.find((d) => d[0] === dept);
 
   async function run() {
@@ -162,9 +163,10 @@ export default function Agents() {
                   {DEPARTMENTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></div>
               <div className="field"><label>Which model</label>
                 <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-                  <option value="openai">OpenAI (GPT){keys && !keys.openai ? ' — no key yet' : ''}</option>
-                  <option value="gemini">Google (Gemini){keys && !keys.gemini ? ' — no key yet' : ''}</option>
-                </select></div>
+                  {PROVIDERS.map(([k]) => (
+                    <option key={k} value={k}>{providerOption(k, keys)}</option>))}
+                </select>
+                <span className="hint">{providerHint(provider)}</span></div>
               <div className="small faint">
                 The agent reads this department's records on the server and never sees anything outside it.
                 It is told to use only what is in the data.
@@ -176,7 +178,7 @@ export default function Agents() {
                 {running ? 'Working…' : `Run the ${meta[1].toLowerCase()} agent`}</button>
               {keys && !keyFor(provider) && (
                 <div className="small faint" style={{ marginTop: 6 }}>
-                  No key for {provider === 'gemini' ? 'Gemini' : 'OpenAI'} yet.</div>)}
+                  No key for {providerLabel(provider)} yet.</div>)}
             </div>
           </div>
         </div>
