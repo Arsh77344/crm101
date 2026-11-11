@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSession, canManage } from '@/lib/session';
 import { sb } from '@/lib/db';
 import { initials } from '@/components/ui';
+import Search from '@/components/Search';
 
 const NAV = [
   ['Sell', [
@@ -50,6 +51,7 @@ export default function WorkspaceLayout({ children }) {
   const router = useRouter();
   const path = usePathname();
   const [theme, setTheme] = useState('light');
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     try { setTheme(localStorage.getItem('cos-theme') || 'light'); } catch { /* ignore */ }
@@ -85,14 +87,15 @@ export default function WorkspaceLayout({ children }) {
           <div className="brand-mark">C</div>
           <div><span className="brand-name">Commerce OS</span><span className="brand-sub">Business workspace</span></div>
         </div>
-        <nav className="nav">
+        <button className="menu-btn" onClick={() => setNavOpen((v) => !v)} aria-label="Menu">☰ Menu</button>
+        <nav className={`nav ${navOpen ? 'show' : ''}`}>
           {NAV.map(([group, items]) => (
             <div key={group}>
               <div className="nav-group">{group}</div>
               {items.map(([href, label, ico]) => {
                 const on = href === '/' ? here === '/' : here.startsWith(href);
                 return (
-                  <Link key={href} href={href} className={on ? 'on' : ''}>
+                  <Link key={href} href={href} className={on ? 'on' : ''} onClick={() => setNavOpen(false)}>
                     <span className="ico">{ico}</span>{label}
                   </Link>
                 );
@@ -118,7 +121,10 @@ export default function WorkspaceLayout({ children }) {
           <div><button className="theme-btn" onClick={signOut}>Sign out</button></div>
         </div>
       </aside>
-      <main className="main">{children}</main>
+      <main className="main">
+        <div className="qbar"><Search /></div>
+        {children}
+      </main>
     </div>
   );
 }

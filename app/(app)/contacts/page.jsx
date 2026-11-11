@@ -1,11 +1,45 @@
 'use client';
 import CrudPage from '@/components/CrudPage';
+import Children from '@/components/Children';
 
 export default function Contacts() {
   return <CrudPage cfg={{
     table: 'contacts', pk: 'contact_id', title: 'Contacts', singular: 'contact',
     sub: (r) => `${r.length} people · ${r.filter((c) => c.lifecycle_stage === 'Customer').length} customers`,
     order: ['created_at', false],
+    sidePanel: (row) => (
+      <div className="stack">
+        <Children parentId={row.contact_id} cfg={{
+          table: 'activities', pk: 'activity_id', parentKey: 'contact_id',
+          title: 'Activity', order: 'created_at',
+          columns: [
+            { key: 'created_at', label: 'When', render: (r) => new Date(r.created_at).toLocaleDateString('en-GB') },
+            { key: 'activity_type', label: 'Type' },
+            { key: 'summary', label: 'What happened' },
+          ],
+          fields: [
+            { name: 'activity_type', label: 'Type', width: 110,
+              options: ['Note', 'Call', 'Email', 'Meeting', 'WhatsApp', 'Visit'] },
+            { name: 'summary', label: 'What happened', required: true, width: 220 },
+            { name: 'follow_up_at', label: 'Follow up', type: 'date', width: 140 },
+          ],
+        }} />
+        <Children parentId={row.contact_id} cfg={{
+          table: 'marketing_permissions', pk: 'permission_id', parentKey: 'contact_id',
+          title: 'Marketing consent',
+          columns: [
+            { key: 'channel', label: 'Channel' },
+            { key: 'status', label: 'Status' },
+            { key: 'lawful_basis_or_reason', label: 'Basis' },
+          ],
+          fields: [
+            { name: 'channel', label: 'Channel', width: 120, options: ['Email', 'WhatsApp', 'SMS', 'Phone', 'Other'] },
+            { name: 'status', label: 'Status', width: 140,
+              options: ['OptedIn', 'Allowed', 'Unknown', 'OptedOut', 'Suppressed', 'DoNotContact'] },
+            { name: 'lawful_basis_or_reason', label: 'Basis', width: 170 },
+          ],
+        }} />
+      </div>),
     search: ['full_name', 'email', 'phone_number', 'business_category', 'country'],
     searchHint: 'Search name, email, phone, country…',
     filter: { col: 'lifecycle_stage', values: ['New', 'Lead', 'Opportunity', 'Customer', 'Dormant'] },

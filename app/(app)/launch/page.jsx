@@ -1,9 +1,10 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, insertRow, updateRow } from '@/lib/db';
 import { uploadImage, deleteImage } from '@/lib/upload';
-import { Page, Badge, Empty, Loading, ErrorNote, Stat, when, money } from '@/components/ui';
+import { assist, checkKeys } from '@/lib/assist';
+import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/components/ui';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
 const STAGES = ['Photos', 'Imagery', 'Copy', 'Pricing', 'Review', 'Published'];
@@ -35,7 +36,14 @@ export default function Launch() {
     cost_price: '', retail_price: '', wholesale_price: '',
   });
   const [imagery, setImagery] = useState({ mode: 'Clean', count: 3, provider: 'openai' });
-  const [words, setWords] = useState({ description: '', tags: '', brief: '' });
+  const [words, setWords] = useState({ description: '', tags: '', brief: '', highlights: '' });
+  const [keys, setKeys] = useState(null);
+  const [thinking, setThinking] = useState('');
+  const [research, setResearch] = useState(null);
+
+  useEffect(() => {
+    checkKeys().then(setKeys).catch(() => setKeys({ openai: false, gemini: false }));
+  }, []);
 
   const q = useQuery(async (c) => {
     const [jobs, integrations] = await Promise.all([
@@ -49,8 +57,39 @@ export default function Launch() {
 
   const ints = q.data?.integrations || [];
   const connected = (name) => ints.some((i) => i.provider === name && i.status === 'Connected');
-  const aiReady = connected('OpenAI') || connected('Image generation');
   const storeReady = connected('Wix') || connected('Shopify');
+  const keyFor = (p) => (p === 'gemini' ? keys?.gemini : keys?.openai);
+  const aiReady = Boolean(keys?.openai || keys?.gemini);
+
+  async function runCopy() {
+    setThinking('copy'); setErr('');
+    try {
+      const out = await assist({
+        action: 'copy', provider: imagery.provider,
+        piece, brief: words.brief, images: shots.map((s) => s.url),
+      });
+      const r = out.result || {};
+      setWords((w) => ({
+        ...w,
+        description: r.description || w.description,
+        tags: (r.tags || []).join(', ') || w.tags,
+        highlights: (r.highlights || []).join('\n'),
+      }));
+      if (r.title) setPiece((pc) => ({ ...pc, public_product_name: pc.public_product_name || r.title }));
+    } catch (e2) { setErr(e2.message || String(e2)); }
+    setThinking('');
+  }
+
+  async function runPrice() {
+    setThinking('price'); setErr('');
+    try {
+      const out = await assist({
+        action: 'price', provider: imagery.provider, piece, brief: words.brief,
+      });
+      setResearch(out.result || null);
+    } catch (e2) { setErr(e2.message || String(e2)); }
+    setThinking('');
+  }
 
   async function addFiles(e) {
     const files = Array.from(e.target.files || []);
@@ -225,15 +264,17 @@ export default function Launch() {
                       <span className="hint">More images cost more and take longer.</span></div>
                     <div className="field"><label>Which model does the work</label>
                       <select value={imagery.provider} onChange={(e) => setImagery({ ...imagery, provider: e.target.value })}>
-                        {PROVIDERS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                        {PROVIDERS.map(([k, label]) => (
+                          <option key={k} value={k}>{label}{keys && !keyFor(k) ? ' — no key yet' : ''}</option>))}
                       </select>
                       <span className="hint">{PROVIDERS.find((p) => p[0] === imagery.provider)?.[2]}</span></div>
                   </div>)}
 
-                {!aiReady && (
+                {keys && !aiReady && (
                   <div className="note" style={{ marginTop: 6 }}>
-                    No AI key is connected yet, so your choice is recorded and the job waits.
-                    Add a key on <Link className="link" href="/integrations">Integrations</Link> and it runs.
+                    No AI key is set yet, so your choice is recorded and the job waits. Add
+                    <span className="mono"> OPENAI_API_KEY </span> or <span className="mono"> GEMINI_API_KEY </span>
+                    to this project's Edge Function secrets and it runs.
                   </div>)}
               </div>
             </>
@@ -248,19 +289,65 @@ export default function Launch() {
                     onChange={(e) => setWords({ ...words, brief: e.target.value })} />
                   <span className="hint">Facts only. The write-up gets built from these plus the photos.</span></div>
 
-                <div className="row" style={{ marginBottom: 10 }}>
-                  <button className="btn btn-sm" disabled={!aiReady} title={aiReady ? '' : 'Needs an AI key'}>
-                    Write the description
+                <div className="row wrap" style={{ marginBottom: 10 }}>
+                  <button className="btn btn-sm" onClick={runCopy}
+                    disabled={!keyFor(imagery.provider) || thinking !== '' || shots.length === 0}
+                    title={keyFor(imagery.provider) ? 'Reads your photos and writes the listing' : 'Needs an AI key'}>
+                    {thinking === 'copy' ? 'Reading the photos…' : 'Write the description'}
                   </button>
-                  <button className="btn btn-sm" disabled={!aiReady} title={aiReady ? '' : 'Needs an AI key'}>
-                    Find comparable prices
+                  <button className="btn btn-sm" onClick={runPrice}
+                    disabled={!keyFor(imagery.provider) || thinking !== ''}
+                    title={keyFor(imagery.provider) ? 'Searches for comparable pieces' : 'Needs an AI key'}>
+                    {thinking === 'price' ? 'Searching…' : 'Find comparable prices'}
                   </button>
-                  {!aiReady && <span className="small faint">Both need a key on Integrations.</span>}
+                  {keys && !keyFor(imagery.provider) && (
+                    <span className="small faint">
+                      No key for {imagery.provider === 'gemini' ? 'Gemini' : 'OpenAI'} yet.
+                    </span>)}
+                  {shots.length === 0 && <span className="small faint">The description needs photos.</span>}
                 </div>
+
+                {words.highlights && (
+                  <div className="note plain small" style={{ marginBottom: 10, whiteSpace: 'pre-line' }}>
+                    {words.highlights}
+                  </div>)}
+
+                {research && (
+                  <div className="card" style={{ marginBottom: 12 }}>
+                    <div className="card-head"><h3>Comparable pieces</h3>
+                      <span className="small muted">
+                        {money(research.low)} – {money(research.high)}
+                      </span></div>
+                    <div className="card-body">
+                      <div className="row" style={{ marginBottom: 8 }}>
+                        <div>
+                          <div className="small faint">Suggested retail</div>
+                          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-.02em' }}>
+                            {money(research.suggested)}</div>
+                        </div>
+                        <span className="spacer" />
+                        <button className="btn btn-sm" type="button"
+                          onClick={() => setPiece({ ...piece, retail_price: research.suggested })}>
+                          Use this price
+                        </button>
+                      </div>
+                      {research.reasoning && <div className="small muted" style={{ marginBottom: 8 }}>{research.reasoning}</div>}
+                      <div className="t-wrap"><table className="table">
+                        <thead><tr><th>Piece</th><th>Seller</th><th className="num">Price</th></tr></thead>
+                        <tbody>{(research.comparables || []).map((c, i) => (
+                          <tr key={i}>
+                            <td>{c.url
+                              ? <a className="link" href={c.url} target="_blank" rel="noreferrer">{c.name}</a>
+                              : c.name}</td>
+                            <td className="small muted">{c.seller}</td>
+                            <td className="num">{money(c.price)}</td>
+                          </tr>))}</tbody></table></div>
+                    </div>
+                  </div>)}
 
                 <div className="field"><label>Description</label>
                   <textarea value={words.description} style={{ minHeight: 120 }}
-                    placeholder="Write it yourself for now, or let the model draft it once a key is in."
+                    placeholder="Write it yourself, or let the model draft it from your photos."
                     onChange={(e) => setWords({ ...words, description: e.target.value })} /></div>
                 <div className="field"><label>Tags</label>
                   <input value={words.tags} placeholder="wedding, silk, handloom"
@@ -330,8 +417,9 @@ export default function Launch() {
               {[
                 ['Photos', `${shots.length} uploaded`],
                 ['Imagery', imagery.mode === 'None' ? 'Skipped' : `${imagery.count} × ${imagery.mode}`],
-                ['Copy', words.description ? 'Written by you' : aiReady ? 'Drafted by the model' : 'Waiting on a key'],
-                ['Pricing', piece.retail_price ? `Set at ${money(piece.retail_price)}` : 'Not set'],
+                ['Copy', words.description ? 'Written' : aiReady ? 'Ready to draft' : 'Waiting on a key'],
+                ['Pricing', piece.retail_price ? `Set at ${money(piece.retail_price)}`
+                  : research ? `Suggested ${money(research.suggested)}` : 'Not set'],
                 ['Review', 'You approve before anything is published'],
               ].map(([k, v]) => (
                 <div className="row small" key={k}>

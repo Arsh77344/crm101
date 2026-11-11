@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useQuery, updateRow, sb } from '@/lib/db';
 import { useSession, canManage } from '@/lib/session';
 import { Page, Loading, ErrorNote } from '@/components/ui';
@@ -15,6 +16,29 @@ export default function Settings() {
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState('');
   const [pwMsg, setPwMsg] = useState('');
+  const [dumping, setDumping] = useState('');
+
+  const TABLES = ['products', 'product_images', 'contacts', 'companies', 'contact_companies',
+    'orders', 'order_items', 'payments', 'shipments', 'returns', 'opportunities', 'activities',
+    'campaigns', 'campaign_members', 'campaign_posts', 'marketing_permissions',
+    'suppliers', 'supplier_orders', 'expenses', 'stock_moves', 'tasks', 'automations',
+    'showrooms', 'showroom_products', 'launch_jobs', 'settings'];
+
+  async function exportEverything() {
+    setDumping('Working…'); setErr('');
+    try {
+      const wb = XLSX.utils.book_new();
+      for (const t of TABLES) {
+        setDumping(`Reading ${t}…`);
+        const { data, error } = await sb().from(t).select('*').limit(5000);
+        if (error) continue;
+        const ws = XLSX.utils.json_to_sheet(data || []);
+        XLSX.utils.book_append_sheet(wb, ws, t.slice(0, 31));
+      }
+      XLSX.writeFile(wb, `commerce-os-backup-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setDumping('');
+    } catch (e2) { setErr(e2.message || String(e2)); setDumping(''); }
+  }
   const q = useQuery(async (c) => {
     const { data, error } = await c.from('settings').select('*').order('setting_key');
     if (error) throw error;
@@ -68,6 +92,14 @@ export default function Settings() {
             <div className="small faint" style={{ marginTop: 6 }}>
               Switch between light and dark from the bottom of the sidebar.
             </div>
+          </div>
+          <div className="card-foot">
+            <div className="small muted" style={{ marginBottom: 7 }}>
+              Take everything out whenever you like. One sheet per table, nothing locked in.
+            </div>
+            <button className="btn btn-sm" onClick={exportEverything} disabled={Boolean(dumping)}>
+              {dumping || 'Export the whole workspace'}
+            </button>
           </div>
           <form className="card-foot" onSubmit={changePassword}>
             <div className="field"><label>New password</label>

@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@/lib/db';
 import { Page, Stat, Badge, Empty, Loading, ErrorNote, Spark, money, when } from '@/components/ui';
@@ -6,6 +7,7 @@ import { Page, Stat, Badge, Empty, Loading, ErrorNote, Spark, money, when } from
 const DAY = 864e5;
 
 export default function Dashboard() {
+  const [range, setRange] = useState(30);
   const q = useQuery(async (c) => {
     const r = await Promise.all([
       c.from('orders').select('*,contacts(full_name)').order('ordered_at', { ascending: false }).limit(300),
@@ -43,16 +45,17 @@ export default function Dashboard() {
     return t >= from && t < to;
   });
 
-  const rev30 = win(sold, 'ordered_at', now - 30 * DAY, now).reduce((s, o) => s + Number(o.total || 0), 0);
-  const revPrev = win(sold, 'ordered_at', now - 60 * DAY, now - 30 * DAY).reduce((s, o) => s + Number(o.total || 0), 0);
-  const ord30 = win(sold, 'ordered_at', now - 30 * DAY, now).length;
+  const R = range * DAY;
+  const rev30 = win(sold, 'ordered_at', now - R, now).reduce((s, o) => s + Number(o.total || 0), 0);
+  const revPrev = win(sold, 'ordered_at', now - 2 * R, now - R).reduce((s, o) => s + Number(o.total || 0), 0);
+  const ord30 = win(sold, 'ordered_at', now - R, now).length;
   const aov = ord30 ? rev30 / ord30 : 0;
 
   const cogsByOrder = {};
   d.items.forEach((i) => {
     cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.quantity || 0);
   });
-  const soldRecent = win(sold, 'ordered_at', now - 30 * DAY, now);
+  const soldRecent = win(sold, 'ordered_at', now - R, now);
   const cogs30 = soldRecent.reduce((s, o) => s + (cogsByOrder[o.order_id] || 0), 0);
   const margin = rev30 ? Math.round(((rev30 - cogs30) / rev30) * 100) : null;
 
@@ -61,7 +64,7 @@ export default function Dashboard() {
   const buyers = Object.keys(byCustomer).length;
   const repeat = buyers ? Math.round((Object.values(byCustomer).filter((n) => n > 1).length / buyers) * 100) : 0;
 
-  const spend30 = win(d.expenses, 'spent_on', now - 30 * DAY, now).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const spend30 = win(d.expenses, 'spent_on', now - R, now).reduce((s, e) => s + Number(e.amount || 0), 0);
   const collected = d.payments.filter((p) => ['Paid', 'Settled'].includes(p.status));
   const awaiting = d.payments.filter((p) => ['Created', 'Link sent'].includes(p.status))
     .reduce((s, p) => s + Number(p.amount || 0), 0);
@@ -75,9 +78,10 @@ export default function Dashboard() {
   const overdue = d.tasks.filter((t) => t.due_on && new Date(t.due_on) < new Date());
   const live = d.campaigns.filter((c) => ['Running', 'Scheduled'].includes(c.status));
 
+  const bucket = Math.max(1, Math.round(range / 8));
   const weeks = Array.from({ length: 8 }, (_, i) => {
-    const to = now - i * 7 * DAY;
-    return win(sold, 'ordered_at', to - 7 * DAY, to).reduce((s, o) => s + Number(o.total || 0), 0);
+    const to = now - i * bucket * DAY;
+    return win(sold, 'ordered_at', to - bucket * DAY, to).reduce((s, o) => s + Number(o.total || 0), 0);
   }).reverse();
 
   const change = revPrev ? Math.round(((rev30 - revPrev) / revPrev) * 100) : null;
@@ -92,17 +96,23 @@ export default function Dashboard() {
 
   return (
     <Page title="Today" sub="The numbers that decide what to do next."
-      actions={<Link className="btn btn-primary" href="/launch">Launch a product</Link>}>
+      actions={<>
+        <div className="pill-row">
+          {[7, 30, 90].map((n) => (
+            <button key={n} className={`chip ${range === n ? 'on' : ''}`} onClick={() => setRange(n)}>{n}d</button>))}
+        </div>
+        <Link className="btn btn-primary" href="/launch">Launch a product</Link>
+      </>}>
 
       <div className="kpi-row" style={{ marginBottom: 12 }}>
-        <Stat label="Revenue · 30 days" value={money(rev30)} spark={weeks}
-          delta={change === null ? `${ord30} orders` : `${change >= 0 ? '+' : ''}${change}% vs previous 30`}
+        <Stat label={`Revenue · ${range} days`} value={money(rev30)} spark={weeks}
+          delta={change === null ? `${ord30} orders` : `${change >= 0 ? '+' : ''}${change}% vs previous ${range}`}
           tone={change === null ? '' : change >= 0 ? 'up' : 'down'} />
-        <Stat label="Average order" value={money(aov)} delta={`${ord30} orders in 30 days`} />
+        <Stat label="Average order" value={money(aov)} delta={`${ord30} orders in ${range} days`} />
         <Stat label="Gross margin" value={margin === null ? '—' : `${margin}%`}
           delta={cogs30 ? `${money(rev30 - cogs30)} after cost of goods` : 'Add cost prices to see this'} />
         <Stat label="Repeat buyers" value={`${repeat}%`} delta={`${buyers} customers have ordered`} />
-        <Stat label="Spent · 30 days" value={money(spend30)}
+        <Stat label={`Spent · ${range} days`} value={money(spend30)}
           delta={rev30 ? `${Math.round((spend30 / rev30) * 100)}% of revenue` : ''} />
         <Stat label="Awaiting payment" value={money(awaiting)}
           delta={`${d.payments.filter((p) => p.status === 'Link sent').length} links unpaid`} />

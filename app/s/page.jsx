@@ -12,7 +12,7 @@ function Showroom() {
     const { data: s } = await c.from('showrooms').select('*').eq('slug', slug).maybeSingle();
     if (!s) return null;
     const { data: picks } = await c.from('showroom_products')
-      .select('custom_price,sort_order,products(public_product_name,colour,fabric,weave_or_motif,description,retail_price,wholesale_price,currency)')
+      .select('custom_price,sort_order,products(public_product_name,colour,fabric,weave_or_motif,description,retail_price,wholesale_price,currency,product_images(public_url,is_primary))')
       .eq('showroom_id', s.showroom_id).order('sort_order');
     return { s, picks: picks || [] };
   }, [slug]);

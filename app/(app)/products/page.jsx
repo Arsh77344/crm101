@@ -1,6 +1,7 @@
 'use client';
 import CrudPage from '@/components/CrudPage';
 import Gallery from '@/components/Gallery';
+import Children from '@/components/Children';
 import { money } from '@/components/ui';
 
 export default function Products() {
@@ -9,7 +10,28 @@ export default function Products() {
     sub: (r) => `${r.length} pieces in the catalogue · ${r.filter((p) => p.status === 'Published').length} live`,
     select: '*,product_images(public_url,is_primary)',
     order: ['created_at', false],
-    sidePanel: (row) => <Gallery productId={row.product_id} />,
+    sidePanel: (row) => (
+      <div className="stack">
+        <Gallery productId={row.product_id} />
+        <Children parentId={row.product_id} cfg={{
+          table: 'stock_moves', pk: 'move_id', parentKey: 'product_id',
+          title: `Stock ledger — now ${row.stock_qty ?? 0}`, order: 'created_at',
+          columns: [
+            { key: 'created_at', label: 'When', render: (r) => new Date(r.created_at).toLocaleDateString('en-GB') },
+            { key: 'reason', label: 'Reason' },
+            { key: 'change', label: 'Change', num: true,
+              render: (r) => <span style={{ color: r.change < 0 ? 'var(--neg)' : 'var(--pos)' }}>
+                {r.change > 0 ? '+' : ''}{r.change}</span> },
+            { key: 'note', label: 'Note' },
+          ],
+          fields: [
+            { name: 'change', label: 'Change', type: 'number', required: true, width: 90 },
+            { name: 'reason', label: 'Reason', width: 130,
+              options: ['Received', 'Adjustment', 'Return', 'Damage', 'Sample'] },
+            { name: 'note', label: 'Note', width: 150 },
+          ],
+        }} />
+      </div>),
     search: ['public_product_name', 'internal_sku', 'colour', 'fabric', 'tags'],
     searchHint: 'Search name, SKU, colour, fabric…',
     filter: { col: 'status', values: ['Draft', 'Review', 'Published', 'Archived'] },
@@ -62,7 +84,8 @@ export default function Products() {
       { name: 'retail_price', label: 'Retail price', type: 'number', step: '0.01' },
       { name: 'wholesale_price', label: 'Wholesale price', type: 'number', step: '0.01' },
       { name: 'currency', label: 'Currency', options: ['INR', 'USD', 'GBP', 'EUR'] },
-      { name: 'stock_qty', label: 'Stock quantity', type: 'number' },
+      { name: 'stock_qty', label: 'Stock quantity', type: 'number',
+        hint: 'Sales and received commissions move this on their own; the ledger shows every change.' },
       { name: 'moq', label: 'Minimum order quantity', type: 'number' },
       { name: 'status', label: 'Status', options: ['Draft', 'Review', 'Published', 'Archived'],
         hint: 'Published pieces can appear in showrooms and on the storefront.' },

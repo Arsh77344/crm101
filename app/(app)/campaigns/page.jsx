@@ -1,6 +1,7 @@
 'use client';
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, insertRow, updateRow, upsertRow, formValues } from '@/lib/db';
 import { Page, Stat, Badge, Empty, Loading, ErrorNote, money, when } from '@/components/ui';
 
@@ -20,7 +21,7 @@ function Campaigns() {
       c.from('campaigns').select('*').order('created_at', { ascending: false }),
       c.from('campaign_members').select('campaign_id,member_status,contacts(contact_id,full_name,email,contact_type,lifecycle_stage)'),
       c.from('campaign_posts').select('*,products(public_product_name)').order('scheduled_for'),
-      c.from('contacts').select('contact_id,full_name,contact_type,email').order('full_name'),
+      c.from('contactable').select('*').order('full_name'),
       c.from('products').select('product_id,public_product_name').order('public_product_name'),
     ]);
     if (camps.error) throw camps.error;
@@ -63,8 +64,12 @@ function Campaigns() {
     const members = d.members.filter((m) => m.campaign_id === id);
     const posts = d.posts.filter((p) => p.campaign_id === id);
     const memberIds = new Set(members.map((m) => m.contacts?.contact_id));
-    const candidates = d.contacts.filter((p) => !memberIds.has(p.contact_id) &&
-      (current.audience_type === 'All' || p.contact_type === current.audience_type || p.contact_type === 'Both'));
+    const channelKey = current.channel === 'WhatsApp' ? 'whatsapp_ok' : current.channel === 'Email' ? 'email_ok' : null;
+    const audienceFit = (p) => current.audience_type === 'All'
+      || p.contact_type === current.audience_type || p.contact_type === 'Both';
+    const pool = d.contacts.filter((p) => !memberIds.has(p.contact_id) && audienceFit(p));
+    const candidates = pool.filter((p) => !p.blocked && (!channelKey || p[channelKey]));
+    const withheld = pool.length - candidates.length;
     const pct = current.budget ? Math.min(100, Math.round((Number(current.spend || 0) / Number(current.budget)) * 100)) : 0;
 
     return (
@@ -161,8 +166,17 @@ function Campaigns() {
 
             <form className="card" onSubmit={(e) => addPeople(e, id)}>
               <div className="card-head"><h3>Add people</h3><span className="small muted">{current.audience_type}</span></div>
+              {withheld > 0 && (
+                <div className="card-body" style={{ paddingBottom: 0 }}>
+                  <div className="note plain small">
+                    {withheld} {withheld === 1 ? 'person is' : 'people are'} held back: no consent for
+                    {' '}{current.channel.toLowerCase()}, or opted out.{' '}
+                    <Link className="link" href="/consent">Consent centre</Link>
+                  </div>
+                </div>)}
               <div className="card-body" style={{ maxHeight: 280, overflowY: 'auto' }}>
-                {candidates.length === 0 && <div className="small muted">Everyone matching this audience is already in.</div>}
+                {candidates.length === 0 && <div className="small muted">
+                  No one left who may be contacted on {current.channel.toLowerCase()}.</div>}
                 {candidates.map((p) => (
                   <label key={p.contact_id} className="row" style={{ gap: 8, padding: '5px 0', cursor: 'pointer' }}>
                     <input type="checkbox" name="contact_id" value={p.contact_id} />

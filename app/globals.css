@@ -245,3 +245,20 @@ input,select,textarea,button{font:inherit;color:inherit}
   .form-grid{grid-template-columns:1fr}
   .content,.topbar{padding-left:14px;padding-right:14px}
 }
+
+/* ---- quick search bar + mobile nav ---- */
+.qbar{display:flex;justify-content:flex-end;padding:12px 26px 0}
+.menu-btn{display:none;width:100%;margin-bottom:8px;background:#ffffff12;border:0;color:#d4d4d8;
+  padding:7px 9px;border-radius:6px;font-size:13px;cursor:pointer;text-align:left}
+@media (max-width:900px){
+  .sidebar{height:auto;max-height:none}
+  .menu-btn{display:block}
+  .nav{display:none}
+  .nav.show{display:block}
+  .qbar{padding:10px 14px 0}
+  .board{grid-template-columns:repeat(2,minmax(160px,1fr))}
+  .cal .day{min-height:76px}
+  .panel{position:static}
+  .grid[style*="360px"],.grid[style*="340px"],.grid[style*="330px"],.grid[style*="320px"]{grid-template-columns:1fr !important}
+  .steps{flex-direction:column}
+}

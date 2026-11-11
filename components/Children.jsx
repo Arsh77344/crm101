@@ -60,7 +60,13 @@ export default function Children({ cfg, parentId }) {
       )}
       <form className="card-foot row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={add}>
         {cfg.fields.map((f) => (
-          f.lookup ? <LookupSelect key={f.name} field={f} /> : (
+          f.lookup ? <LookupSelect key={f.name} field={f} />
+          : f.options ? (
+            <select key={f.name} name={f.name} required={f.required}
+              style={{ minWidth: f.width || 130, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line)' }}>
+              {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
             <input key={f.name} name={f.name} type={f.type || 'text'} step={f.step} placeholder={f.label}
               required={f.required} style={{ width: f.width || 120, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line)' }} />
           )))}

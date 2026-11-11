@@ -53,10 +53,9 @@ export default function Orders() {
       { name: 'company_id', label: 'Company', lookup: { table: 'companies', pk: 'company_id', label: 'company_name' } },
       { name: 'order_type', label: 'Type', options: ['B2C', 'B2B'] },
       { name: 'order_status', label: 'Status', options: ['Draft', 'Pending Payment', 'Processing', 'Fulfilled', 'Cancelled'] },
-      { name: 'subtotal', label: 'Subtotal', type: 'number', step: '0.01' },
       { name: 'discount', label: 'Discount', type: 'number', step: '0.01' },
-      { name: 'shipping', label: 'Shipping', type: 'number', step: '0.01' },
-      { name: 'total', label: 'Total', type: 'number', step: '0.01' },
+      { name: 'shipping', label: 'Shipping', type: 'number', step: '0.01',
+        hint: 'Subtotal and total are worked out from the items below.' },
       { name: 'external_order_reference', label: 'External reference', placeholder: 'Wix or Shopify order id' },
     ],
   }} />;
