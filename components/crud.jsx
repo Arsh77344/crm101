@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, insertRow, updateRow, removeRow, formValues } from '@/lib/db';
 import Sheet from './Sheet';
 import { useSession, canManage } from '@/lib/session';
@@ -19,6 +19,7 @@ function cell(row, col) {
 export default function Crud({ cfg }) {
   const router = useRouter();
   const sp = useSearchParams();
+  const here = usePathname();
   const { profile } = useSession();
   const manager = canManage(profile?.role);
   const id = sp.get('id');
@@ -55,8 +56,7 @@ export default function Crud({ cfg }) {
   const editing = id ? (id === 'new' ? {} : all.find((r) => r[cfg.pk] === id) || {}) : null;
 
   function go(nextId) {
-    const base = window.location.pathname;
-    router.replace(nextId ? `${base}?id=${nextId}` : base, { scroll: false });
+    router.replace(nextId ? `${here}?id=${nextId}` : here, { scroll: false });
   }
 
   async function onSubmit(e) {
@@ -109,10 +109,10 @@ export default function Crud({ cfg }) {
         <span className="spacer" />
         {cfg.filter && (
           <div className="pill-row">
-            <button className={`chip ${!filterValue ? 'on' : ''}`} onClick={() => router.replace(window.location.pathname)}>All</button>
+            <button className={`chip ${!filterValue ? 'on' : ''}`} onClick={() => router.replace(here)}>All</button>
             {cfg.filter.values.map((v) => (
               <button key={v} className={`chip ${filterValue === v ? 'on' : ''}`}
-                onClick={() => router.replace(`${window.location.pathname}?f=${encodeURIComponent(v)}`)}>{v}</button>
+                onClick={() => router.replace(`${here}?f=${encodeURIComponent(v)}`)}>{v}</button>
             ))}
           </div>
         )}

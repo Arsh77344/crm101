@@ -41,6 +41,7 @@ export default function Launch() {
   const [research, setResearch] = useState(null);
   const [bulk, setBulk] = useState(false);
   const [made, setMade] = useState([]);
+  const [unsure, setUnsure] = useState([]);
 
   useEffect(() => {
     checkKeys().then(setKeys).catch(() => setKeys(NO_KEYS));
@@ -61,6 +62,15 @@ export default function Launch() {
   const storeReady = connected('Wix') || connected('Shopify');
   const keyFor = (p) => hasKey(keys, p);
   const aiReady = anyKey(keys);
+
+  // Pressing Continue past the photos starts the analysis straight away, so the
+  // next screen is already filling in rather than waiting for a button press.
+  function autoAnalyse() {
+    if (thinking !== '' || !shots.length) return;
+    if (!keyFor(imagery.provider) || !keys?.brand_set) return;
+    if (words.description) return;
+    runCopy();
+  }
 
   async function runImages() {
     setThinking('images'); setErr('');
@@ -96,7 +106,16 @@ export default function Launch() {
         tags: (r.tags || []).join(', ') || w.tags,
         highlights: (r.highlights || []).join('\n'),
       }));
-      if (r.title) setPiece((pc) => ({ ...pc, public_product_name: pc.public_product_name || r.title }));
+      const ob = r.observed || {};
+      setPiece((pc) => ({
+        ...pc,
+        public_product_name: pc.public_product_name || r.title || '',
+        category: pc.category || ob.category || '',
+        fabric: pc.fabric || ob.fabric || '',
+        colour: pc.colour || ob.colour || '',
+        weave_or_motif: pc.weave_or_motif || ob.weave_or_motif || '',
+      }));
+      setUnsure(r.uncertain || []);
     } catch (e2) { setErr(e2.message || String(e2)); }
     setThinking('');
   }
@@ -244,7 +263,25 @@ export default function Launch() {
 
           {step === 1 && (
             <>
-              <div className="card-head"><h3>What is the piece?</h3></div>
+              <div className="card-head"><h3>What is the piece?</h3>
+                {thinking === 'copy' && <span className="small faint">Reading your photos…</span>}</div>
+              {thinking === 'copy' && (
+                <div className="card-body" style={{ paddingBottom: 0 }}>
+                  <div className="note plain small">
+                    Looking at the {shots.length} photo{shots.length === 1 ? '' : 's'} you uploaded.
+                    Anything it can read off them appears in these fields and in the description
+                    on the next step. Everything stays editable.
+                  </div>
+                </div>)}
+              {unsure.length > 0 && thinking === '' && (
+                <div className="card-body" style={{ paddingBottom: 0 }}>
+                  <div className="note small">
+                    <strong>Filled in from the photos — check these.</strong> A photograph cannot
+                    settle what something is made of, and the model is unsure about:{' '}
+                    {unsure.join(', ')}. Correct anything that is wrong before you go on; it ends
+                    up in the description and in front of customers.
+                  </div>
+                </div>)}
               <div className="card-body"><div className="form-grid">
                 <div className="field full"><label>Product name</label>
                   <input value={piece.public_product_name} placeholder="Mashru Silk Banarasi — Deep Magenta"
@@ -500,7 +537,8 @@ export default function Launch() {
             {step > 0 && <button className="btn btn-sm" onClick={() => setStep(step - 1)}>Back</button>}
             <span className="spacer" />
             {step < 4
-              ? <button className="btn btn-primary btn-sm" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue</button>
+              ? <button className="btn btn-primary btn-sm" disabled={!canNext}
+                  onClick={() => { if (step === 0) autoAnalyse(); setStep(step + 1); }}>Continue</button>
               : <button className="btn btn-primary btn-sm" disabled={saving} onClick={finish}>
                   {saving ? 'Creating…' : 'Create the product'}</button>}
           </div>
