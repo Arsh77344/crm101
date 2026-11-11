@@ -176,7 +176,7 @@ export default function Launch() {
           ...shots.map((s, i) => ({
             product_id: product.product_id, image_role: i === 0 ? 'Primary' : 'Gallery',
             original_filename: s.name, storage_path: s.path, public_url: s.url,
-            is_primary: i === 0, bytes: s.bytes,
+            is_primary: i === 0, bytes: s.bytes, width: s.width, height: s.height,
           })),
           ...kept.map((m) => ({
             product_id: product.product_id, image_role: `Generated (${m.mode})`,

@@ -26,7 +26,7 @@ export default function Gallery({ productId }) {
         const up = await uploadImage(files[i], `product/${productId}`);
         const { error } = await sb().from('product_images').insert({
           product_id: productId, storage_path: up.path, public_url: up.url,
-          original_filename: up.name, bytes: up.bytes,
+          original_filename: up.name, bytes: up.bytes, width: up.width, height: up.height,
           is_primary: existing === 0 && i === 0, image_role: existing === 0 && i === 0 ? 'Primary' : 'Gallery',
         });
         if (error) throw error;
