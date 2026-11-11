@@ -6,6 +6,8 @@ import { uploadImage, deleteImage } from '@/lib/upload';
 import { assist, checkKeys, PROVIDERS, NO_KEYS, SECRET_NAME,
   providerLabel, providerOption, providerHint, hasKey, anyKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/components/ui';
+import Sheet from '@/components/Sheet';
+import { PRODUCT_SHEET } from '@/lib/schemas';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
 const STAGES = ['Photos', 'Imagery', 'Copy', 'Pricing', 'Review', 'Published'];
@@ -37,6 +39,8 @@ export default function Launch() {
   const [keys, setKeys] = useState(null);
   const [thinking, setThinking] = useState('');
   const [research, setResearch] = useState(null);
+  const [bulk, setBulk] = useState(false);
+  const [made, setMade] = useState([]);
 
   useEffect(() => {
     checkKeys().then(setKeys).catch(() => setKeys(NO_KEYS));
@@ -57,6 +61,26 @@ export default function Launch() {
   const storeReady = connected('Wix') || connected('Shopify');
   const keyFor = (p) => hasKey(keys, p);
   const aiReady = anyKey(keys);
+
+  async function runImages() {
+    setThinking('images'); setErr('');
+    try {
+      const out = await assist({
+        action: 'images', provider: 'gemini', mode: imagery.mode, count: imagery.count,
+        piece, images: shots.map((s) => s.url),
+      });
+      setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
+      if ((out.failed || []).length) {
+        setErr(`${out.images.length} came back, ${out.failed.length} failed: ${out.failed[0]}`);
+      }
+    } catch (e2) { setErr(e2.message || String(e2)); }
+    setThinking('');
+  }
+
+  async function dropMade(path) {
+    setMade((m) => m.filter((x) => x.path !== path));
+    try { await deleteImage(path); } catch { /* the row is gone from the draft either way */ }
+  }
 
   async function runCopy() {
     setThinking('copy'); setErr('');
@@ -116,19 +140,28 @@ export default function Launch() {
         tags: words.tags || null,
         status: 'Review',
       });
-      if (shots.length) {
-        const rows = shots.map((s, i) => ({
-          product_id: product.product_id, image_role: i === 0 ? 'Primary' : 'Gallery',
-          original_filename: s.name, storage_path: s.path, public_url: s.url,
-          is_primary: i === 0, bytes: s.bytes,
-        }));
+      const kept = made.filter((m) => m.use);
+      if (shots.length || kept.length) {
+        const rows = [
+          ...shots.map((s, i) => ({
+            product_id: product.product_id, image_role: i === 0 ? 'Primary' : 'Gallery',
+            original_filename: s.name, storage_path: s.path, public_url: s.url,
+            is_primary: i === 0, bytes: s.bytes,
+          })),
+          ...kept.map((m) => ({
+            product_id: product.product_id, image_role: `Generated (${m.mode})`,
+            original_filename: m.path.split('/').pop(), storage_path: m.path, public_url: m.url,
+            is_primary: false, bytes: m.bytes,
+          })),
+        ];
         const { error } = await (await import('@/lib/db')).sb().from('product_images').insert(rows);
         if (error) throw error;
       }
       const note = [
         `${shots.length} photo${shots.length === 1 ? '' : 's'} uploaded.`,
         imagery.mode === 'None' ? 'Using the photos as shot.'
-          : `${imagery.count} × ${imagery.mode.toLowerCase()} images requested via ${providerLabel(imagery.provider)}.`,
+          : kept.length ? `${kept.length} × ${imagery.mode.toLowerCase()} image${kept.length === 1 ? '' : 's'} generated and kept.`
+          : `No ${imagery.mode.toLowerCase()} images generated.`,
         words.brief ? `Brief: ${words.brief}` : '',
       ].filter(Boolean).join(' ');
       await insertRow('launch_jobs', {
@@ -138,14 +171,23 @@ export default function Launch() {
         message: aiReady ? note : `${note} Waiting on an AI key before anything can be generated.`,
       });
       setDone(product);
-      setShots([]); setStep(0);
+      setShots([]); setMade([]); setResearch(null); setStep(0);
       setPiece({ public_product_name: '', internal_sku: '', category: 'Banarasi Saree', fabric: '', colour: '',
         weave_or_motif: '', stock_qty: 1, moq: 1, cost_price: '', retail_price: '', wholesale_price: '' });
-      setWords({ description: '', tags: '', brief: '' });
+      setWords({ description: '', tags: '', brief: '', highlights: '' });
       q.reload();
     } catch (e2) { setErr(e2.message || String(e2)); }
     setSaving(false);
   }
+
+  const gaps = [
+    !words.description && 'No description. Go back and press "Write the description", or type one in.',
+    !piece.retail_price && 'No retail price. "Find comparable prices" suggests one, or set it yourself.',
+    !piece.cost_price && 'No agreed cost, so contribution cannot be worked out and the partner payable will be wrong.',
+    imagery.mode !== 'None' && made.length === 0
+      && `No ${imagery.mode.toLowerCase()} images generated yet — press Generate on the Imagery step.`,
+    !aiReady && 'No AI key is set, so none of the generated steps can run at all.',
+  ].filter(Boolean);
 
   const canNext = [
     shots.length > 0,
@@ -265,6 +307,53 @@ export default function Launch() {
                           <option key={k} value={k}>{providerOption(k, keys)}</option>))}
                       </select>
                       <span className="hint">{providerHint(imagery.provider)}</span></div>
+                  </div>)}
+
+                {imagery.mode !== 'None' && (
+                  <div style={{ marginTop: 14 }}>
+                    <div className="row wrap" style={{ gap: 8 }}>
+                      <button className="btn btn-primary btn-sm" onClick={runImages}
+                        disabled={thinking !== '' || shots.length === 0 || !keys?.gemini}
+                        title={keys?.gemini ? 'Generates from the photos you uploaded' : 'Needs a Gemini key'}>
+                        {thinking === 'images'
+                          ? 'Generating…'
+                          : `Generate ${imagery.count} × ${imagery.mode.toLowerCase()}`}
+                      </button>
+                      {made.length > 0 && (
+                        <span className="small faint">
+                          {made.filter((m) => m.use).length} of {made.length} kept
+                        </span>)}
+                      {shots.length === 0 && <span className="small faint">Upload a photo first.</span>}
+                      {keys && !keys.gemini && (
+                        <span className="small faint">
+                          Generated imagery needs a Gemini key. ChatGPT and Claude do not produce
+                          images here, whichever model you picked above for the words.
+                        </span>)}
+                    </div>
+
+                    {made.length > 0 && (
+                      <>
+                        <div className="shots" style={{ marginTop: 12 }}>
+                          {made.map((m) => (
+                            <div className="shot" key={m.path}
+                              style={{ opacity: m.use ? 1 : 0.4,
+                                       outline: m.use ? '2px solid var(--accent)' : 'none' }}>
+                              <img src={m.url} alt="" />
+                              <button onClick={() => dropMade(m.path)} title="Delete this one">×</button>
+                              <button title={m.use ? 'Keep it out of the listing' : 'Use it in the listing'}
+                                onClick={() => setMade((xs) => xs.map((x) =>
+                                  x.path === m.path ? { ...x, use: !x.use } : x))}
+                                style={{ right: 'auto', left: 4 }}>{m.use ? '✓' : '+'}</button>
+                            </div>))}
+                        </div>
+                        <div className="note plain small" style={{ marginTop: 10 }}>
+                          These are renderings made from your photographs, not photographs of the piece.
+                          Check each one against the real garment before you keep it — the border, the
+                          motifs and the colour are what a customer will expect to receive. Google embeds
+                          an invisible SynthID watermark marking them as AI-generated. Your uploaded
+                          photos are saved as the main images either way.
+                        </div>
+                      </>)}
                   </div>)}
 
                 {keys && !aiReady && (
@@ -390,6 +479,15 @@ export default function Launch() {
                     </div>
                   </div>
                 </div>
+                {gaps.length > 0 && (
+                  <div className="note" style={{ marginTop: 14 }}>
+                    <strong>Not done yet.</strong> You can create it anyway and come back to these,
+                    but nothing here happens on its own:
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                      {gaps.map((g) => <li key={g} className="small">{g}</li>)}
+                    </ul>
+                  </div>)}
+
                 <div className="note plain small" style={{ marginTop: 14 }}>
                   It is created with status <strong>Review</strong>, so nothing reaches the storefront until you publish it.
                   {!storeReady && ' No storefront is connected yet in any case.'}
@@ -409,6 +507,28 @@ export default function Launch() {
         </div>
 
         <div className="stack">
+          <div className="card">
+            <div className="card-head"><h3>Many at once</h3>
+              <button className="btn btn-sm" onClick={() => setBulk((v) => !v)}>
+                {bulk ? 'Close' : 'Use a spreadsheet'}</button></div>
+            {!bulk
+              ? (
+                <div className="card-body small muted">
+                  The wizard is for one piece with photos. To load a batch from a partner's
+                  stock list, import a spreadsheet instead — download the template, fill it in,
+                  upload it. Photos get added per piece afterwards.
+                </div>)
+              : (
+                <>
+                  <div className="card-body small muted" style={{ paddingBottom: 0 }}>
+                    Pieces arrive as <strong>Draft</strong> with no photos. Only the product name
+                    is required; anything you leave blank you can fill in later.
+                  </div>
+                  <Sheet cfg={{ table: 'products', singular: 'product', columns: PRODUCT_SHEET }}
+                    onDone={() => { q.reload(); setBulk(false); }} />
+                </>)}
+          </div>
+
           <div className="card">
             <div className="card-head"><h3>What happens next</h3></div>
             <div className="card-body stack" style={{ gap: 9 }}>
