@@ -8,7 +8,7 @@ export default function Products() {
   return <CrudPage cfg={{
     table: 'products', pk: 'product_id', title: 'Products', singular: 'product',
     sub: (r) => `${r.length} pieces in the catalogue · ${r.filter((p) => p.status === 'Published').length} live`,
-    select: '*,product_images(public_url,is_primary)',
+    select: '*,product_images(public_url,is_primary),brands(name)',
     order: ['created_at', false],
     sidePanel: (row) => (
       <div className="stack">
@@ -28,7 +28,7 @@ export default function Products() {
         }} />
         <Children parentId={row.product_id} cfg={{
           table: 'stock_moves', pk: 'move_id', parentKey: 'product_id',
-          title: `Stock ledger — now ${row.stock_qty ?? 0}`, order: 'created_at',
+          title: 'Availability log', order: 'created_at',
           columns: [
             { key: 'created_at', label: 'When', render: (r) => new Date(r.created_at).toLocaleDateString('en-GB') },
             { key: 'reason', label: 'Reason' },
@@ -47,13 +47,20 @@ export default function Products() {
       </div>),
     search: ['public_product_name', 'internal_sku', 'colour', 'fabric', 'tags'],
     searchHint: 'Search name, SKU, colour, fabric…',
-    filter: { col: 'status', values: ['Draft', 'Review', 'Published', 'Archived'] },
+    filter: { col: 'availability', values: ['In stock', 'Limited', 'Reserved', 'Unavailable'] },
     emptyTitle: 'No products here', emptyHint: 'Add your first piece, or clear the filter.',
     kpis: (r) => [
       { label: 'Live', value: r.filter((p) => p.status === 'Published').length },
-      { label: 'In stock', value: r.reduce((s, p) => s + (p.stock_qty || 0), 0), delta: 'pieces across the catalogue' },
-      { label: 'Catalogue value', value: money(r.reduce((s, p) => s + (p.retail_price || 0) * (p.stock_qty || 0), 0)), delta: 'at retail' },
-      { label: 'Out of stock', value: r.filter((p) => !p.stock_qty).length },
+      { label: 'Available', value: r.filter((p) => p.availability === 'In stock').length,
+        delta: `${r.filter((p) => p.availability === 'Unavailable').length} unavailable` },
+      { label: 'Average contribution',
+        value: (() => {
+          const live = r.filter((p) => p.retail_price && p.cost_price != null);
+          if (!live.length) return '—';
+          const pctv = live.reduce((s, p) => s + (p.retail_price - p.cost_price) / p.retail_price, 0) / live.length;
+          return `${Math.round(pctv * 100)}%`;
+        })(), delta: 'what you keep per piece' },
+      { label: 'Brands', value: new Set(r.map((p) => p.brand_id).filter(Boolean)).size },
     ],
     columns: [
       { key: 'product_images', label: '', render: (r) => {
@@ -62,10 +69,18 @@ export default function Products() {
       } },
       { key: 'public_product_name', label: 'Product' },
       { key: 'internal_sku', label: 'SKU' },
-      { key: 'fabric', label: 'Fabric' },
-      { key: 'retail_price', label: 'Retail', fmt: 'money', num: true },
-      { key: 'wholesale_price', label: 'Wholesale', fmt: 'money', num: true },
-      { key: 'stock_qty', label: 'Stock', num: true },
+      { key: 'brands.name', label: 'Brand' },
+      { key: 'cost_price', label: 'You owe', fmt: 'money', num: true },
+      { key: 'retail_price', label: 'You charge', fmt: 'money', num: true },
+      { key: 'contribution', label: 'Contribution', num: true,
+        render: (r) => {
+          if (!r.retail_price || r.cost_price == null) return <span className="faint">—</span>;
+          const c = Number(r.retail_price) - Number(r.cost_price);
+          const pctv = Math.round((c / Number(r.retail_price)) * 100);
+          return <span style={{ color: c > 0 ? 'var(--pos)' : 'var(--neg)' }}>
+            {money(c)} <span className="faint">({pctv}%)</span></span>;
+        } },
+      { key: 'availability', label: 'Availability', fmt: 'badge' },
       { key: 'status', label: 'Status', fmt: 'badge' },
     ],
     sheet: [
@@ -93,12 +108,19 @@ export default function Products() {
       { name: 'weave_or_motif', label: 'Weave or motif', placeholder: 'Jangla floral' },
       { name: 'description', label: 'Description', type: 'textarea' },
       { name: 'tags', label: 'Tags', placeholder: 'wedding, silk, handloom' },
-      { name: 'cost_price', label: 'Cost price', type: 'number', step: '0.01' },
+      { name: 'brand_id', label: 'Brand partner',
+        lookup: { table: 'brands', pk: 'brand_id', label: 'name' },
+        hint: 'Whose piece this is. They are paid only when it sells.' },
+      { name: 'cost_price', label: 'Agreed cost to you', type: 'number', step: '0.01',
+        hint: 'What the partner is owed per piece. Payable on sale, not up front.' },
       { name: 'retail_price', label: 'Retail price', type: 'number', step: '0.01' },
       { name: 'wholesale_price', label: 'Wholesale price', type: 'number', step: '0.01' },
       { name: 'currency', label: 'Currency', options: ['INR', 'USD', 'GBP', 'EUR'] },
-      { name: 'stock_qty', label: 'Stock quantity', type: 'number',
-        hint: 'Sales and received commissions move this on their own; the ledger shows every change.' },
+      { name: 'availability', label: 'Availability',
+        options: ['In stock', 'Limited', 'Reserved', 'Unavailable'],
+        hint: 'What the partner says. You hold none of it yourself.' },
+      { name: 'stock_qty', label: 'Units the partner holds', type: 'number',
+        hint: 'Advisory only. Nothing is deducted when you sell.' },
       { name: 'moq', label: 'Minimum order quantity', type: 'number' },
       { name: 'status', label: 'Status', options: ['Draft', 'Review', 'Published', 'Archived'],
         hint: 'Published pieces can appear in showrooms and on the storefront.' },

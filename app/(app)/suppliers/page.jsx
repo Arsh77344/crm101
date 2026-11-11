@@ -4,15 +4,15 @@ import Children from '@/components/Children';
 
 export default function Suppliers() {
   return <CrudPage cfg={{
-    table: 'suppliers', pk: 'supplier_id', title: 'Weavers & suppliers', singular: 'supplier',
+    table: 'suppliers', pk: 'supplier_id', title: 'Service vendors', singular: 'vendor',
     sub: (r) => `${r.filter((s) => s.status === 'Active').length} active of ${r.length}`,
     order: ['created_at', false],
     search: ['name', 'cluster', 'specialty', 'kind'],
     searchHint: 'Search name, cluster, speciality…',
     filter: { col: 'kind', values: ['Weaver', 'Dyer', 'Finisher', 'Packaging', 'Photographer', 'Other'] },
-    emptyTitle: 'No suppliers yet', emptyHint: 'The people who actually make the pieces belong here.',
+    emptyTitle: 'No suppliers yet', emptyHint: 'Photographers, packaging, couriers and anyone else you pay for a service. The brands whose pieces you sell live under Brand partners.',
     kpis: (r) => [
-      { label: 'Weavers', value: r.filter((s) => s.kind === 'Weaver').length },
+      { label: 'Vendors', value: r.length },
       { label: 'Active', value: r.filter((s) => s.status === 'Active').length },
       { label: 'Average lead time',
         value: r.length ? `${Math.round(r.reduce((s, x) => s + (x.lead_time_days || 0), 0) / r.length)} days` : '—' },

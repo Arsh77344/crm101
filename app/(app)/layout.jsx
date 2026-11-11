@@ -40,7 +40,9 @@ const NAV = [
     ['/consent', 'Consent centre', '⚖'],
   ]],
   ['Make & spend', [
-    ['/suppliers', 'Weavers & suppliers', '⚒'],
+    ['/brands', 'Brand partners', '◧'],
+    ['/payables', 'What you owe', '₹'],
+    ['/suppliers', 'Service vendors', '⚒'],
     ['/expenses', 'Expenses', '⊟'],
     ['/finance', 'Profit & loss', '◪'],
   ]],

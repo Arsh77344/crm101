@@ -7,7 +7,7 @@ const STATUS = ['Not booked', 'Booked', 'Picked up', 'In transit', 'Out for deli
 export default function Shipments() {
   return <CrudPage cfg={{
     table: 'shipments', pk: 'shipment_id', title: 'Shipments', singular: 'shipment',
-    select: '*,orders(order_number,contacts(full_name))',
+    select: '*,orders(order_number,contacts(full_name)),brands(name,city)',
     sub: (r) => `${r.filter((s) => !['Delivered', 'RTO', 'Lost'].includes(s.status)).length} in motion · ${r.length} total`,
     order: ['created_at', false],
     search: ['awb', 'courier', 'address_city', 'orders.order_number'],
@@ -28,6 +28,7 @@ export default function Shipments() {
         render: (r) => (r.tracking_url
           ? <a className="link mono" href={r.tracking_url} target="_blank" rel="noreferrer">{r.awb}</a>
           : <span className="mono">{r.awb || '—'}</span>) },
+      { key: 'brands.name', label: 'Collect from' },
       { key: 'address_city', label: 'Destination' },
       { key: 'status', label: 'Status', fmt: 'badge' },
       { key: 'shipping_cost', label: 'Cost', fmt: 'money', num: true },
@@ -43,6 +44,10 @@ export default function Shipments() {
     ],
     fields: [
       { name: 'order_id', label: 'Order', lookup: { table: 'orders', pk: 'order_id', label: 'order_number' } },
+      { name: 'brand_id', label: 'Collect from',
+        lookup: { table: 'brands', pk: 'brand_id', label: 'name' },
+        hint: 'The courier picks up from this partner. One pickup per brand on a mixed order.' },
+      { name: 'pickup_address', label: 'Pickup address', type: 'textarea' },
       { name: 'courier', label: 'Courier', placeholder: 'Delhivery, Blue Dart, DHL' },
       { name: 'awb', label: 'AWB / tracking number' },
       { name: 'tracking_url', label: 'Tracking link', placeholder: 'https://shiprocket.co/tracking/…' },

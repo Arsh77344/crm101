@@ -22,15 +22,16 @@ export default function Dashboard() {
       c.from('expenses').select('amount,spent_on,category'),
       c.from('tasks').select('*').neq('status', 'Done').order('due_on').limit(6),
       c.from('returns').select('resolution,amount,opened_on'),
+      c.from('payables').select('amount,status'),
     ]);
     const bad = r.find((x) => x.error);
     if (bad) throw bad.error;
-    const [orders, items, deals, products, campaigns, posts, contacts, shipments, payments, expenses, tasks, returns] = r;
+    const [orders, items, deals, products, campaigns, posts, contacts, shipments, payments, expenses, tasks, returns, payables] = r;
     return {
       orders: orders.data || [], items: items.data || [], deals: deals.data || [], products: products.data || [],
       campaigns: campaigns.data || [], posts: posts.data || [], contacts: contacts.data || [],
       shipments: shipments.data || [], payments: payments.data || [], expenses: expenses.data || [],
-      tasks: tasks.data || [], returns: returns.data || [],
+      tasks: tasks.data || [], returns: returns.data || [], payables: payables.data || [],
     };
   }, []);
 
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const ord30 = win(sold, 'ordered_at', now - R, now).length;
   const aov = ord30 ? rev30 / ord30 : 0;
 
+  // "Cost" here is what the brand partner is owed on each line, not stock you bought.
   const cogsByOrder = {};
   d.items.forEach((i) => {
     cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.quantity || 0);
@@ -70,8 +72,10 @@ export default function Dashboard() {
     .reduce((s, p) => s + Number(p.amount || 0), 0);
 
   const openDeals = d.deals.filter((o) => !['Won', 'Lost'].includes(o.stage));
-  const stockValue = d.products.reduce((s, p) => s + Number(p.cost_price || 0) * Number(p.stock_qty || 0), 0);
-  const lowStock = d.products.filter((p) => p.status === 'Published' && (p.stock_qty ?? 0) <= 2);
+  const owedNow = (d.payables || []).filter((p) => ['Accrued', 'Approved'].includes(p.status))
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const lowStock = d.products.filter((p) => p.status === 'Published'
+    && ['Limited', 'Unavailable'].includes(p.availability));
   const moving = d.shipments.filter((s) => ['Booked', 'Picked up', 'In transit', 'Out for delivery'].includes(s.status));
   const unbooked = d.shipments.filter((s) => s.status === 'Not booked');
   const openReturns = d.returns.filter((r) => r.resolution === 'Pending');
@@ -109,8 +113,8 @@ export default function Dashboard() {
           delta={change === null ? `${ord30} orders` : `${change >= 0 ? '+' : ''}${change}% vs previous ${range}`}
           tone={change === null ? '' : change >= 0 ? 'up' : 'down'} />
         <Stat label="Average order" value={money(aov)} delta={`${ord30} orders in ${range} days`} />
-        <Stat label="Gross margin" value={margin === null ? '—' : `${margin}%`}
-          delta={cogs30 ? `${money(rev30 - cogs30)} after cost of goods` : 'Add cost prices to see this'} />
+        <Stat label="Contribution" value={margin === null ? '—' : `${margin}%`}
+          delta={cogs30 ? `${money(rev30 - cogs30)} after partner costs` : 'Add agreed costs to see this'} />
         <Stat label="Repeat buyers" value={`${repeat}%`} delta={`${buyers} customers have ordered`} />
         <Stat label={`Spent · ${range} days`} value={money(spend30)}
           delta={rev30 ? `${Math.round((spend30 / rev30) * 100)}% of revenue` : ''} />
@@ -121,8 +125,7 @@ export default function Dashboard() {
       <div className="kpi-row" style={{ marginBottom: 16 }}>
         <Stat label="Open pipeline" value={money(openDeals.reduce((s, o) => s + Number(o.estimated_value || 0), 0))}
           delta={`${openDeals.length} deals`} />
-        <Stat label="Stock at cost" value={money(stockValue)}
-          delta={`${d.products.reduce((s, p) => s + (p.stock_qty || 0), 0)} pieces`} />
+        <Stat label="Owed to partners" value={money(owedNow)} delta="accrued on sales, unpaid" />
         <Stat label="Parcels moving" value={moving.length}
           delta={unbooked.length ? `${unbooked.length} still unbooked` : 'all booked'}
           tone={unbooked.length ? 'down' : ''} />
@@ -131,7 +134,8 @@ export default function Dashboard() {
         <Stat label="Tasks open" value={d.tasks.length}
           delta={overdue.length ? `${overdue.length} overdue` : 'nothing overdue'}
           tone={overdue.length ? 'down' : ''} />
-        <Stat label="Low stock" value={lowStock.length} delta={lowStock.length ? 'commission a restock' : 'healthy'}
+        <Stat label="Hard to get" value={lowStock.length}
+          delta={lowStock.length ? 'check with the partner' : 'all available'}
           tone={lowStock.length ? 'down' : ''} />
       </div>
 
@@ -180,8 +184,8 @@ export default function Dashboard() {
               </div>))}
             {lowStock.length > 0 && (
               <div className="note small">
-                Low stock: {lowStock.map((p) => p.public_product_name).join(', ')}.{' '}
-                <Link className="link" href="/suppliers">Commission a restock</Link>
+                Limited or unavailable: {lowStock.map((p) => p.public_product_name).join(', ')}.{' '}
+                <Link className="link" href="/brands">Check with the partner</Link>
               </div>)}
             {unbooked.length > 0 && (
               <div className="note warn small">
