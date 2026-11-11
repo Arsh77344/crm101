@@ -3,6 +3,7 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useQuery, updateRow, sb } from '@/lib/db';
 import { useSession, canManage } from '@/lib/session';
+import TwoFactor from '@/components/TwoFactor';
 import { Page, Loading, ErrorNote } from '@/components/ui';
 
 const LABELS = {
@@ -125,6 +126,8 @@ export default function Settings() {
               </div>
             </div>))}
         </div>
+        <div className="stack">
+        <TwoFactor />
         <div className="card">
           <div className="card-head"><h3>Your account</h3></div>
           <div className="card-body stack" style={{ gap: 8 }}>
@@ -152,6 +155,7 @@ export default function Settings() {
             <button className="btn btn-primary btn-sm">Change password</button>
             {pwMsg && <div className="small" style={{ marginTop: 8 }}>{pwMsg}</div>}
           </form>
+        </div>
         </div>
       </div>
     </Page>

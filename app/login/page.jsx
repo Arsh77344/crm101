@@ -12,6 +12,8 @@ export default function Login() {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [busy, setBusy] = useState(false);
+  const [needCode, setNeedCode] = useState(null);
+  const [code, setCode] = useState('');
 
   useEffect(() => {
     sb().auth.getSession().then(({ data }) => { if (data.session) router.replace('/'); });
@@ -24,6 +26,22 @@ export default function Login() {
       if (mode === 'in') {
         const { error } = await sb().auth.signInWithPassword({ email, password });
         if (error) throw error;
+        // If the second-factor check itself fails, never strand the person at a blank
+        // screen: let them in on the password and surface the problem in Settings.
+        try {
+          const { data: aal } = await sb().auth.mfa.getAuthenticatorAssuranceLevel();
+          if (aal?.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+            const { data: f } = await sb().auth.mfa.listFactors();
+            const factor = (f?.totp || []).find((x) => x.status === 'verified');
+            if (factor) {
+              const { data: ch, error: ce } = await sb().auth.mfa.challenge({ factorId: factor.id });
+              if (ce) throw ce;
+              setNeedCode({ factorId: factor.id, challengeId: ch.id });
+              setBusy(false);
+              return;
+            }
+          }
+        } catch { /* fall through to the workspace */ }
         router.replace('/');
       } else {
         const { data, error } = await sb().auth.signUp({ email, password, options: { data: { full_name: name } } });
@@ -35,10 +53,42 @@ export default function Login() {
     setBusy(false);
   }
 
+  async function submitCode(e) {
+    e.preventDefault();
+    setErr(''); setBusy(true);
+    const { error } = await sb().auth.mfa.verify({
+      factorId: needCode.factorId, challengeId: needCode.challengeId, code: code.trim(),
+    });
+    if (error) { setErr(error.message); setBusy(false); return; }
+    router.replace('/');
+  }
+
   function toggleTheme() {
     const now = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', now);
     try { localStorage.setItem('cos-theme', now); } catch { /* ignore */ }
+  }
+
+  if (needCode) {
+    return (
+      <div className="auth">
+        <form className="auth-card" onSubmit={submitCode}>
+          <h1>One more step</h1>
+          <p className="sub">Enter the six-digit code from your authenticator app.</p>
+          {err && <div className="err">{err}</div>}
+          <div className="field"><label>Code</label>
+            <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric"
+              autoComplete="one-time-code" maxLength={6} placeholder="000000" autoFocus required /></div>
+          <button className="btn btn-primary" disabled={busy || code.length < 6}>
+            {busy ? 'Checking…' : 'Sign in'}</button>
+          <p className="small muted" style={{ marginTop: 14, textAlign: 'center' }}>
+            <a className="link" href="#" onClick={(e) => {
+              e.preventDefault(); sb().auth.signOut(); setNeedCode(null); setCode(''); setErr('');
+            }}>Start again</a>
+          </p>
+        </form>
+      </div>
+    );
   }
 
   return (
