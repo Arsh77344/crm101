@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useQuery, insertRow, updateRow } from '@/lib/db';
 import { uploadImage, deleteImage } from '@/lib/upload';
 import { assist, checkKeys, PROVIDERS, NO_KEYS, SECRET_NAME,
-  providerLabel, providerOption, providerHint, hasKey, anyKey } from '@/lib/assist';
+  providerLabel, providerOption, providerHint, hasKey, anyKey, firstWithKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/components/ui';
 import Sheet from '@/components/Sheet';
 import { PRODUCT_SHEET } from '@/lib/schemas';
@@ -44,7 +44,10 @@ export default function Launch() {
   const [unsure, setUnsure] = useState([]);
 
   useEffect(() => {
-    checkKeys().then(setKeys).catch(() => setKeys(NO_KEYS));
+    checkKeys().then((k) => {
+      setKeys(k);
+      setImagery((im) => (k && !k[im.provider] ? { ...im, provider: firstWithKey(k, im.provider) } : im));
+    }).catch(() => setKeys(NO_KEYS));
   }, []);
 
   const q = useQuery(async (c) => {
@@ -66,9 +69,17 @@ export default function Launch() {
   // Pressing Continue past the photos starts the analysis straight away, so the
   // next screen is already filling in rather than waiting for a button press.
   function autoAnalyse() {
-    if (thinking !== '' || !shots.length) return;
-    if (!keyFor(imagery.provider) || !keys?.brand_set) return;
-    if (words.description) return;
+    if (thinking !== '' || !shots.length || words.description) return;
+    if (!keys) return;
+    if (!keys.brand_set) {
+      setErr('Add the brand name and what it sells on Settings, then the photos can be read.');
+      return;
+    }
+    if (!keyFor(imagery.provider)) {
+      setErr(`No key for ${providerLabel(imagery.provider)}, so the photos were not read. `
+        + `Pick a model that has a key on the Imagery step, or add that key.`);
+      return;
+    }
     runCopy();
   }
 

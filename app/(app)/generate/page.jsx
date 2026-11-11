@@ -1,10 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, insertRow, sb } from '@/lib/db';
 import { assist, PROVIDERS, NO_KEYS, providerLabel, providerOption,
-  providerHint, hasKey } from '@/lib/assist';
+  providerHint, hasKey, firstWithKey } from '@/lib/assist';
 import { Page, Badge, Loading, ErrorNote, money, when } from '@/components/ui';
 
 const CHANNELS = ['Instagram', 'WhatsApp', 'Email', 'Facebook'];
@@ -36,6 +36,11 @@ export default function Generate() {
   }, []);
 
   const d = q.data;
+  useEffect(() => {
+    if (d?.keys && !d.keys[opts.provider]) {
+      setOpts((o) => ({ ...o, provider: firstWithKey(d.keys, o.provider) }));
+    }
+  }, [d?.keys]);
   const keyFor = (p) => hasKey(d?.keys, p);
   const brandSet = d?.keys?.brand_set;
 

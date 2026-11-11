@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery, insertRow } from '@/lib/db';
 import { runAgent, PROVIDERS, NO_KEYS, providerLabel, providerOption,
-  providerHint, hasKey } from '@/lib/assist';
+  providerHint, hasKey, firstWithKey } from '@/lib/assist';
 import { Page, Badge, Loading, ErrorNote, Empty, when } from '@/components/ui';
 
 const DEPARTMENTS = [
@@ -32,6 +32,9 @@ export default function Agents() {
   }, []);
 
   const keys = q.data?.keys;
+  useEffect(() => {
+    if (keys && !keys[provider]) setProvider(firstWithKey(keys, provider));
+  }, [keys]);
   const keyFor = (p) => hasKey(keys, p);
   const meta = DEPARTMENTS.find((d) => d[0] === dept);
 
