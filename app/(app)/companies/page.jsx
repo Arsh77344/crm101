@@ -16,6 +16,14 @@ export default function Companies() {
       { key: 'country', label: 'Country' },
       { key: 'website', label: 'Website' },
     ],
+    sheet: [
+      { key: 'company_name', label: 'Company name', required: true, example: 'Meher Boutique' },
+      { key: 'company_type', label: 'Type', example: 'Boutique' },
+      { key: 'wholesale_tier', label: 'Wholesale tier', example: 'Tier 1' },
+      { key: 'country', label: 'Country', example: 'India' },
+      { key: 'website', label: 'Website', example: 'meherboutique.in' },
+      { key: 'notes', label: 'Notes', example: 'Prefers bridal weaves' },
+    ],
     fields: [
       { name: 'company_name', label: 'Company name', required: true },
       { name: 'company_type', label: 'Type', placeholder: 'Boutique, Distributor' },

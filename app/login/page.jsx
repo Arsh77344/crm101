@@ -47,11 +47,11 @@ export default function Login() {
         <div className="row" style={{ marginBottom: 18 }}>
           <div className="brand-mark">C</div>
           <div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 15 }}>Commerce Business OS</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Commerce Business OS</div>
             <div className="faint" style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase' }}>Workspace</div>
           </div>
           <span className="spacer" />
-          <button type="button" className="btn btn-ghost btn-sm" onClick={toggleTheme}>☾</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={toggleTheme} title="Light or dark">☾</button>
         </div>
         <h1>{mode === 'in' ? 'Sign in' : 'Create your account'}</h1>
         <p className="sub">{mode === 'in'

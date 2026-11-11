@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { useQuery, insertRow, updateRow, removeRow, formValues, sb } from '@/lib/db';
+import { useQuery, insertRow, updateRow, removeRow, formValues } from '@/lib/db';
+import Sheet from './Sheet';
 import { useSession, canManage } from '@/lib/session';
 import { Page, Badge, Empty, Loading, ErrorNote, Stat, money, when } from './ui';
 
@@ -26,6 +26,7 @@ export default function Crud({ cfg }) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const main = useQuery(async (c) => {
     let query = c.from(cfg.table).select(cfg.select || '*');
@@ -81,10 +82,22 @@ export default function Crud({ cfg }) {
 
   return (
     <Page title={cfg.title} sub={cfg.sub ? cfg.sub(all) : `${all.length} records`}
-      actions={<button className="btn btn-primary" onClick={() => go('new')}>New {cfg.singular}</button>}>
+      actions={<>
+        {cfg.sheet && (
+          <button className="btn" onClick={() => setSheetOpen((v) => !v)}>
+            {sheetOpen ? 'Hide import' : 'Import / export'}
+          </button>)}
+        <button className="btn btn-primary" onClick={() => go('new')}>New {cfg.singular}</button>
+      </>}>
       <ErrorNote error={main.error || err} />
 
-      {kpis && <div className="kpi-row" style={{ marginBottom: 18 }}>
+      {cfg.sheet && sheetOpen && (
+        <div style={{ marginBottom: 16 }}>
+          <Sheet cfg={{ table: cfg.table, singular: cfg.singular, columns: cfg.sheet }}
+            onDone={() => { main.reload(); setSheetOpen(false); }} />
+        </div>)}
+
+      {kpis && <div className="kpi-row" style={{ marginBottom: 16 }}>
         {kpis.map((k) => <Stat key={k.label} {...k} />)}
       </div>}
 

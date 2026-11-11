@@ -33,14 +33,33 @@ export function Badge({ children }) {
   if (children === null || children === undefined || children === '') return <span className="faint">—</span>;
   return <span className={`badge ${TONE[children] ?? ''}`}>{children}</span>;
 }
-export function Stat({ label, value, delta }) {
+export function Stat({ label, value, delta, tone, spark }) {
   return (
     <div className="card stat">
       <div className="label">{label}</div>
       <div className="value">{value}</div>
-      {delta && <div className="delta">{delta}</div>}
+      {delta && <div className={`delta ${tone || ''}`}>{delta}</div>}
+      {spark && <Spark values={spark} />}
     </div>
   );
+}
+
+export function Spark({ values = [] }) {
+  const max = Math.max(1, ...values);
+  return (
+    <div className="spark" style={{ marginTop: 8 }}>
+      {values.map((v, i) => (
+        <i key={i} className={i === values.length - 1 ? 'hi' : ''}
+           style={{ height: `${Math.max(4, (v / max) * 100)}%` }} />
+      ))}
+    </div>
+  );
+}
+
+export function pct(now, before) {
+  if (!before) return null;
+  const change = Math.round(((now - before) / before) * 100);
+  return { text: `${change >= 0 ? '+' : ''}${change}% vs previous`, tone: change >= 0 ? 'up' : 'down' };
 }
 export function Empty({ title, hint, children }) {
   return (

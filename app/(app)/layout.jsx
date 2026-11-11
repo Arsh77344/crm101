@@ -107,7 +107,7 @@ export default function WorkspaceLayout({ children }) {
               <div className="who" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {profile?.full_name || user.email}
               </div>
-              <div style={{ fontSize: 11, textTransform: 'capitalize' }}>
+              <div className="role">
                 {role}{canManage(role) ? '' : ' · limited'}
               </div>
             </div>

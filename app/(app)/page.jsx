@@ -1,65 +1,133 @@
 'use client';
 import Link from 'next/link';
 import { useQuery } from '@/lib/db';
-import { Page, Stat, Badge, Empty, Loading, ErrorNote, money, when } from '@/components/ui';
+import { Page, Stat, Badge, Empty, Loading, ErrorNote, Spark, money, when } from '@/components/ui';
+
+const DAY = 864e5;
 
 export default function Dashboard() {
   const q = useQuery(async (c) => {
-    const [orders, deals, products, campaigns, posts, jobs, contacts, shipments, payments, expenses, tasks] =
-      await Promise.all([
-        c.from('orders').select('*,contacts(full_name)').order('ordered_at', { ascending: false }).limit(50),
-        c.from('opportunities').select('*'),
-        c.from('products').select('product_id,status,stock_qty,public_product_name,retail_price'),
-        c.from('campaigns').select('*'),
-        c.from('campaign_posts').select('*').gte('scheduled_for', new Date().toISOString()).order('scheduled_for').limit(5),
-        c.from('launch_jobs').select('*,products(public_product_name)').neq('status', 'Done').limit(5),
-        c.from('contacts').select('contact_id,created_at,lifecycle_stage'),
-        c.from('shipments').select('*,orders(order_number)'),
-        c.from('payments').select('amount,fee,status,created_at'),
-        c.from('expenses').select('amount,spent_on,category'),
-        c.from('tasks').select('*').neq('status', 'Done').order('due_on').limit(6),
-      ]);
-    const first = [orders, deals, products, campaigns, posts, jobs, contacts, shipments, payments, expenses, tasks]
-      .find((r) => r.error);
-    if (first) throw first.error;
+    const r = await Promise.all([
+      c.from('orders').select('*,contacts(full_name)').order('ordered_at', { ascending: false }).limit(300),
+      c.from('order_items').select('quantity,unit_price,order_id,products(cost_price,public_product_name)'),
+      c.from('opportunities').select('stage,estimated_value'),
+      c.from('products').select('product_id,status,stock_qty,public_product_name,retail_price,cost_price'),
+      c.from('campaigns').select('*'),
+      c.from('campaign_posts').select('*').gte('scheduled_for', new Date().toISOString()).order('scheduled_for').limit(5),
+      c.from('contacts').select('contact_id,created_at,lifecycle_stage'),
+      c.from('shipments').select('status,shipped_at,orders(order_number)'),
+      c.from('payments').select('amount,fee,status,paid_at,created_at'),
+      c.from('expenses').select('amount,spent_on,category'),
+      c.from('tasks').select('*').neq('status', 'Done').order('due_on').limit(6),
+      c.from('returns').select('resolution,amount,opened_on'),
+    ]);
+    const bad = r.find((x) => x.error);
+    if (bad) throw bad.error;
+    const [orders, items, deals, products, campaigns, posts, contacts, shipments, payments, expenses, tasks, returns] = r;
     return {
-      orders: orders.data || [], deals: deals.data || [], products: products.data || [],
-      campaigns: campaigns.data || [], posts: posts.data || [], jobs: jobs.data || [],
-      contacts: contacts.data || [], shipments: shipments.data || [], payments: payments.data || [],
-      expenses: expenses.data || [], tasks: tasks.data || [],
+      orders: orders.data || [], items: items.data || [], deals: deals.data || [], products: products.data || [],
+      campaigns: campaigns.data || [], posts: posts.data || [], contacts: contacts.data || [],
+      shipments: shipments.data || [], payments: payments.data || [], expenses: expenses.data || [],
+      tasks: tasks.data || [], returns: returns.data || [],
     };
   }, []);
 
-  if (q.loading) return <Page title="Business control centre"><Loading /></Page>;
-  if (q.error) return <Page title="Business control centre"><ErrorNote error={q.error} /></Page>;
-
+  if (q.loading) return <Page title="Today"><Loading /></Page>;
+  if (q.error) return <Page title="Today"><ErrorNote error={q.error} /></Page>;
   const d = q.data;
-  const since = Date.now() - 30 * 864e5;
-  const paid = d.payments.filter((p) => ['Paid', 'Settled'].includes(p.status));
-  const revenue30 = paid.filter((p) => new Date(p.created_at).getTime() >= since)
+
+  const now = Date.now();
+  const sold = d.orders.filter((o) => ['Fulfilled', 'Processing'].includes(o.order_status));
+  const win = (list, field, from, to) => list.filter((x) => {
+    const t = new Date(x[field]).getTime();
+    return t >= from && t < to;
+  });
+
+  const rev30 = win(sold, 'ordered_at', now - 30 * DAY, now).reduce((s, o) => s + Number(o.total || 0), 0);
+  const revPrev = win(sold, 'ordered_at', now - 60 * DAY, now - 30 * DAY).reduce((s, o) => s + Number(o.total || 0), 0);
+  const ord30 = win(sold, 'ordered_at', now - 30 * DAY, now).length;
+  const aov = ord30 ? rev30 / ord30 : 0;
+
+  const cogsByOrder = {};
+  d.items.forEach((i) => {
+    cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.quantity || 0);
+  });
+  const soldRecent = win(sold, 'ordered_at', now - 30 * DAY, now);
+  const cogs30 = soldRecent.reduce((s, o) => s + (cogsByOrder[o.order_id] || 0), 0);
+  const margin = rev30 ? Math.round(((rev30 - cogs30) / rev30) * 100) : null;
+
+  const byCustomer = {};
+  sold.forEach((o) => { if (o.contact_id) byCustomer[o.contact_id] = (byCustomer[o.contact_id] || 0) + 1; });
+  const buyers = Object.keys(byCustomer).length;
+  const repeat = buyers ? Math.round((Object.values(byCustomer).filter((n) => n > 1).length / buyers) * 100) : 0;
+
+  const spend30 = win(d.expenses, 'spent_on', now - 30 * DAY, now).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const collected = d.payments.filter((p) => ['Paid', 'Settled'].includes(p.status));
+  const awaiting = d.payments.filter((p) => ['Created', 'Link sent'].includes(p.status))
     .reduce((s, p) => s + Number(p.amount || 0), 0);
-  const spend30 = d.expenses.filter((e) => new Date(e.spent_on).getTime() >= since)
-    .reduce((s, e) => s + Number(e.amount || 0), 0);
+
   const openDeals = d.deals.filter((o) => !['Won', 'Lost'].includes(o.stage));
-  const inTransit = d.shipments.filter((s) => ['Booked', 'Picked up', 'In transit', 'Out for delivery'].includes(s.status));
-  const live = d.campaigns.filter((c) => ['Running', 'Scheduled'].includes(c.status));
+  const stockValue = d.products.reduce((s, p) => s + Number(p.cost_price || 0) * Number(p.stock_qty || 0), 0);
   const lowStock = d.products.filter((p) => p.status === 'Published' && (p.stock_qty ?? 0) <= 2);
+  const moving = d.shipments.filter((s) => ['Booked', 'Picked up', 'In transit', 'Out for delivery'].includes(s.status));
+  const unbooked = d.shipments.filter((s) => s.status === 'Not booked');
+  const openReturns = d.returns.filter((r) => r.resolution === 'Pending');
   const overdue = d.tasks.filter((t) => t.due_on && new Date(t.due_on) < new Date());
+  const live = d.campaigns.filter((c) => ['Running', 'Scheduled'].includes(c.status));
+
+  const weeks = Array.from({ length: 8 }, (_, i) => {
+    const to = now - i * 7 * DAY;
+    return win(sold, 'ordered_at', to - 7 * DAY, to).reduce((s, o) => s + Number(o.total || 0), 0);
+  }).reverse();
+
+  const change = revPrev ? Math.round(((rev30 - revPrev) / revPrev) * 100) : null;
+
+  const unitsByProduct = {};
+  d.items.forEach((i) => {
+    const n = i.products?.public_product_name;
+    if (n) unitsByProduct[n] = (unitsByProduct[n] || 0) + Number(i.quantity || 0) * Number(i.unit_price || 0);
+  });
+  const top = Object.entries(unitsByProduct).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topMax = Math.max(1, ...top.map((t) => t[1]));
 
   return (
-    <Page title="Business control centre" sub="Where the money, the making and the marketing stand today."
+    <Page title="Today" sub="The numbers that decide what to do next."
       actions={<Link className="btn btn-primary" href="/launch">Launch a product</Link>}>
-      <div className="kpi-row" style={{ marginBottom: 18 }}>
-        <Stat label="Collected · 30 days" value={money(revenue30)} delta={`${paid.length} payments all time`} />
-        <Stat label="Spent · 30 days" value={money(spend30)} delta={revenue30 ? `${Math.round((spend30 / revenue30) * 100)}% of income` : ''} />
-        <Stat label="Open pipeline" value={money(openDeals.reduce((s, o) => s + Number(o.estimated_value || 0), 0))} delta={`${openDeals.length} deals`} />
-        <Stat label="Parcels moving" value={inTransit.length} delta={`${d.shipments.filter((s) => s.status === 'Not booked').length} not booked`} />
-        <Stat label="Open tasks" value={d.tasks.length} delta={overdue.length ? `${overdue.length} overdue` : 'nothing overdue'} />
+
+      <div className="kpi-row" style={{ marginBottom: 12 }}>
+        <Stat label="Revenue · 30 days" value={money(rev30)} spark={weeks}
+          delta={change === null ? `${ord30} orders` : `${change >= 0 ? '+' : ''}${change}% vs previous 30`}
+          tone={change === null ? '' : change >= 0 ? 'up' : 'down'} />
+        <Stat label="Average order" value={money(aov)} delta={`${ord30} orders in 30 days`} />
+        <Stat label="Gross margin" value={margin === null ? '—' : `${margin}%`}
+          delta={cogs30 ? `${money(rev30 - cogs30)} after cost of goods` : 'Add cost prices to see this'} />
+        <Stat label="Repeat buyers" value={`${repeat}%`} delta={`${buyers} customers have ordered`} />
+        <Stat label="Spent · 30 days" value={money(spend30)}
+          delta={rev30 ? `${Math.round((spend30 / rev30) * 100)}% of revenue` : ''} />
+        <Stat label="Awaiting payment" value={money(awaiting)}
+          delta={`${d.payments.filter((p) => p.status === 'Link sent').length} links unpaid`} />
+      </div>
+
+      <div className="kpi-row" style={{ marginBottom: 16 }}>
+        <Stat label="Open pipeline" value={money(openDeals.reduce((s, o) => s + Number(o.estimated_value || 0), 0))}
+          delta={`${openDeals.length} deals`} />
+        <Stat label="Stock at cost" value={money(stockValue)}
+          delta={`${d.products.reduce((s, p) => s + (p.stock_qty || 0), 0)} pieces`} />
+        <Stat label="Parcels moving" value={moving.length}
+          delta={unbooked.length ? `${unbooked.length} still unbooked` : 'all booked'}
+          tone={unbooked.length ? 'down' : ''} />
+        <Stat label="Open returns" value={openReturns.length}
+          delta={openReturns.length ? money(openReturns.reduce((s, r) => s + Number(r.amount || 0), 0)) : 'none'} />
+        <Stat label="Tasks open" value={d.tasks.length}
+          delta={overdue.length ? `${overdue.length} overdue` : 'nothing overdue'}
+          tone={overdue.length ? 'down' : ''} />
+        <Stat label="Low stock" value={lowStock.length} delta={lowStock.length ? 'commission a restock' : 'healthy'}
+          tone={lowStock.length ? 'down' : ''} />
       </div>
 
       <div className="grid g2">
         <div className="card">
-          <div className="card-head"><h3>Recent orders</h3><Link className="link small" href="/orders">All orders →</Link></div>
+          <div className="card-head"><h3>Recent orders</h3><Link className="link small" href="/orders">All orders</Link></div>
           {d.orders.length === 0 ? <Empty title="No orders yet" /> : (
             <div className="t-wrap"><table className="table">
               <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th className="num">Total</th></tr></thead>
@@ -69,40 +137,31 @@ export default function Dashboard() {
                   <td>{o.contacts?.full_name || '—'}</td>
                   <td><Badge>{o.order_status}</Badge></td>
                   <td className="num">{money(o.total)}</td>
-                </tr>))}</tbody></table></div>
-          )}
+                </tr>))}</tbody></table></div>)}
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Campaigns in flight</h3><Link className="link small" href="/campaigns">All campaigns →</Link></div>
+          <div className="card-head"><h3>Best sellers</h3><Link className="link small" href="/products">Products</Link></div>
           <div className="card-body stack">
-            {live.length === 0 && <Empty title="Nothing running" hint="Build a campaign to reach your list." />}
-            {live.map((c) => {
-              const pct = c.budget ? Math.min(100, Math.round((Number(c.spend || 0) / Number(c.budget)) * 100)) : 0;
-              return (
-                <div key={c.campaign_id}>
-                  <div className="row" style={{ marginBottom: 5 }}>
-                    <Link className="link" href={`/campaigns?id=${c.campaign_id}`}>{c.campaign_name}</Link>
-                    <span className="spacer" /><Badge>{c.status}</Badge>
-                  </div>
-                  <div className="bar"><span style={{ width: `${pct}%` }} /></div>
-                  <div className="small muted" style={{ marginTop: 4 }}>
-                    {c.channel} · {money(c.spend)} of {money(c.budget)} · ends {when(c.end_date)}
-                  </div>
-                </div>);
-            })}
+            {top.length === 0 && <div className="small muted">No sales recorded yet.</div>}
+            {top.map(([name, value]) => (
+              <div key={name}>
+                <div className="row small"><span style={{ flex: 1 }}>{name}</span>
+                  <span className="muted num">{money(value)}</span></div>
+                <div className="bar" style={{ marginTop: 3 }}><span style={{ width: `${(value / topMax) * 100}%` }} /></div>
+              </div>))}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Needs you today</h3><Link className="link small" href="/tasks">All tasks →</Link></div>
+          <div className="card-head"><h3>Needs you</h3><Link className="link small" href="/tasks">All tasks</Link></div>
           <div className="card-body stack" style={{ gap: 10 }}>
-            {d.tasks.length === 0 && <Empty title="All clear" hint="Nothing is waiting on you." />}
+            {d.tasks.length === 0 && <div className="small muted">Nothing waiting on you.</div>}
             {d.tasks.map((t) => (
               <div key={t.task_id} className="row" style={{ alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{t.title}</div>
-                  <div className="small muted">{t.detail?.slice(0, 80)}</div>
+                  <div style={{ fontWeight: 500 }}>{t.title}</div>
+                  <div className="small faint">{t.detail?.slice(0, 70)}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <Badge>{t.priority}</Badge>
@@ -112,21 +171,39 @@ export default function Dashboard() {
             {lowStock.length > 0 && (
               <div className="note small">
                 Low stock: {lowStock.map((p) => p.public_product_name).join(', ')}.{' '}
-                <Link className="link" href="/suppliers">Commission a restock →</Link>
+                <Link className="link" href="/suppliers">Commission a restock</Link>
+              </div>)}
+            {unbooked.length > 0 && (
+              <div className="note warn small">
+                {unbooked.length} order{unbooked.length === 1 ? '' : 's'} paid but not booked with a courier.{' '}
+                <Link className="link" href="/shipments">Book them</Link>
               </div>)}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Scheduled content</h3><Link className="link small" href="/calendar">Calendar →</Link></div>
-          {d.posts.length === 0 ? <Empty title="Nothing scheduled" hint="Plan posts from a campaign." /> : (
-            <div className="t-wrap"><table className="table">
-              <thead><tr><th>Post</th><th>Channel</th><th>When</th><th>Status</th></tr></thead>
-              <tbody>{d.posts.map((p) => (
-                <tr key={p.post_id}><td>{p.title}</td><td className="small muted">{p.channel}</td>
-                  <td className="small">{when(p.scheduled_for, true)}</td><td><Badge>{p.status}</Badge></td></tr>))}
-              </tbody></table></div>
-          )}
+          <div className="card-head"><h3>Marketing</h3><Link className="link small" href="/campaigns">Campaigns</Link></div>
+          <div className="card-body stack">
+            {live.length === 0 && <div className="small muted">No campaign is running.</div>}
+            {live.map((c) => {
+              const pct = c.budget ? Math.min(100, Math.round((Number(c.spend || 0) / Number(c.budget)) * 100)) : 0;
+              return (
+                <div key={c.campaign_id}>
+                  <div className="row"><Link className="link small" href={`/campaigns?id=${c.campaign_id}`}>{c.campaign_name}</Link>
+                    <span className="spacer" /><span className="small muted">{money(c.spend)} / {money(c.budget)}</span></div>
+                  <div className="bar" style={{ marginTop: 3 }}><span style={{ width: `${pct}%` }} /></div>
+                </div>);
+            })}
+            {d.posts.length > 0 && (
+              <>
+                <div className="small faint" style={{ marginTop: 4 }}>Next out the door</div>
+                {d.posts.slice(0, 3).map((p) => (
+                  <div className="row small" key={p.post_id}>
+                    <span style={{ flex: 1 }}>{p.title}</span>
+                    <span className="faint">{when(p.scheduled_for)}</span>
+                  </div>))}
+              </>)}
+          </div>
         </div>
       </div>
     </Page>

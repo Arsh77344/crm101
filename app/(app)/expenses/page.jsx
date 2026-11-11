@@ -34,6 +34,13 @@ export default function Expenses() {
       { key: 'campaigns.campaign_name', label: 'Campaign' },
       { key: 'amount', label: 'Amount', fmt: 'money', num: true },
     ],
+    sheet: [
+      { key: 'spent_on', label: 'Date', example: '2026-11-01' },
+      { key: 'category', label: 'Category', required: true, example: 'Weaving' },
+      { key: 'vendor', label: 'Paid to', example: 'Noor Jahan Weaving Unit' },
+      { key: 'amount', label: 'Amount', required: true, example: 16800 },
+      { key: 'notes', label: 'Notes', example: '' },
+    ],
     fields: [
       { name: 'spent_on', label: 'Date', type: 'date' },
       { name: 'category', label: 'Category', options: CATS },

@@ -47,6 +47,17 @@ export default function Suppliers() {
           { name: 'expected_on', label: 'Expected', type: 'date', width: 140 },
         ],
       }} />),
+    sheet: [
+      { key: 'name', label: 'Name', required: true, example: 'Ustad Shakeel Ansari' },
+      { key: 'kind', label: 'Kind', example: 'Weaver' },
+      { key: 'cluster', label: 'Cluster', example: 'Madanpura, Varanasi' },
+      { key: 'phone', label: 'Phone', example: '+91 94150 22187' },
+      { key: 'specialty', label: 'Speciality', example: 'Kadhua booti on katan silk' },
+      { key: 'lead_time_days', label: 'Lead time days', example: 42 },
+      { key: 'rate_note', label: 'How they charge', example: 'Per piece' },
+      { key: 'status', label: 'Status', example: 'Active' },
+      { key: 'notes', label: 'Notes', example: '' },
+    ],
     fields: [
       { name: 'name', label: 'Name', required: true },
       { name: 'kind', label: 'Kind', options: ['Weaver', 'Dyer', 'Finisher', 'Packaging', 'Photographer', 'Other'] },
