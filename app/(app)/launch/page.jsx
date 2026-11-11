@@ -13,6 +13,14 @@ const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
 const STAGES = ['Photos', 'Imagery', 'Copy', 'Pricing', 'Review', 'Published'];
 const STATUS = ['Queued', 'Running', 'Blocked', 'Done', 'Failed'];
 
+// What is happening right now, in order, so the wait is legible rather than a spinner.
+const STAGE = {
+  copy: ['Reading the photographs', 'Working out what the piece is and drafting the words.'],
+  price: ['Searching comparable pieces', 'Looking up what similar pieces sell for right now.'],
+  rewrite: ['Writing the description', 'Rewriting it now that the market is known.'],
+  images: ['Generating images', 'Rendering the shots from your photographs.'],
+};
+
 const IMAGERY = [
   ['None', 'Keep my photos', 'Use the shots as they are. Nothing generated.'],
   ['Clean', 'Clean cut-outs', 'Same garment, background removed, even lighting.'],
@@ -66,9 +74,11 @@ export default function Launch() {
   const keyFor = (p) => hasKey(keys, p);
   const aiReady = anyKey(keys);
 
-  // Pressing Continue past the photos starts the analysis straight away, so the
-  // next screen is already filling in rather than waiting for a button press.
-  function autoAnalyse() {
+  // Pressing Continue past the photos runs the whole reading in order: look at the
+  // photographs, search what comparable pieces sell for, then write the description
+  // knowing both. Each stage shows while it runs, and a later stage failing never
+  // throws away what an earlier one produced.
+  async function runPipeline() {
     if (thinking !== '' || !shots.length || words.description) return;
     if (!keys) return;
     if (!keys.brand_set) {
@@ -80,7 +90,60 @@ export default function Launch() {
         + `Pick a model that has a key on the Imagery step, or add that key.`);
       return;
     }
-    runCopy();
+    setErr('');
+    const urls = shots.map((x) => x.url);
+    let current = { ...piece };
+
+    const applyWords = (r) => setWords((w) => ({
+      ...w,
+      description: r.description || w.description,
+      tags: (r.tags || []).join(', ') || w.tags,
+      highlights: (r.highlights || []).join('\n'),
+    }));
+
+    try {
+      setThinking('copy');
+      const out = await assist({ action: 'copy', provider: imagery.provider,
+        piece: current, brief: words.brief, images: urls });
+      const r = out.result || {};
+      const ob = r.observed || {};
+      current = {
+        ...current,
+        public_product_name: current.public_product_name || r.title || '',
+        category: current.category || ob.category || '',
+        fabric: current.fabric || ob.fabric || '',
+        colour: current.colour || ob.colour || '',
+        weave_or_motif: current.weave_or_motif || ob.weave_or_motif || '',
+      };
+      setPiece(current);
+      setUnsure(r.uncertain || []);
+      applyWords(r);
+    } catch (e2) {
+      setErr(e2.message || String(e2)); setThinking(''); return;
+    }
+
+    let found = null;
+    try {
+      setThinking('price');
+      const out = await assist({ action: 'price', provider: imagery.provider,
+        piece: current, brief: words.brief });
+      found = out.result || null;
+      setResearch(found);
+    } catch (e2) {
+      setErr(`The description is written, but the price search failed: ${e2.message || e2}`);
+    }
+
+    if (found?.comparables?.length) {
+      try {
+        setThinking('rewrite');
+        const out = await assist({ action: 'copy', provider: imagery.provider,
+          piece: current, brief: words.brief, images: urls, research: found });
+        const r = out.result || {};
+        applyWords(r);
+        if (r.uncertain) setUnsure(r.uncertain);
+      } catch { /* the first description stands */ }
+    }
+    setThinking('');
   }
 
   async function runImages() {
@@ -232,6 +295,12 @@ export default function Launch() {
       actions={<Link className="btn" href="/products">All products</Link>}>
       <ErrorNote error={q.error || err} />
 
+      {thinking !== '' && STAGE[thinking] && (
+        <div className="note" style={{ marginBottom: 12 }}>
+          <strong>{STAGE[thinking][0]}…</strong> {STAGE[thinking][1]}
+          {' '}Everything it produces lands in the fields below, editable, before anything is created.
+        </div>)}
+
       {done && (
         <div className="ok" style={{ marginBottom: 14 }}>
           Created <strong>{done.public_product_name}</strong> as a draft in Review.{' '}
@@ -275,15 +344,8 @@ export default function Launch() {
           {step === 1 && (
             <>
               <div className="card-head"><h3>What is the piece?</h3>
-                {thinking === 'copy' && <span className="small faint">Reading your photos…</span>}</div>
-              {thinking === 'copy' && (
-                <div className="card-body" style={{ paddingBottom: 0 }}>
-                  <div className="note plain small">
-                    Looking at the {shots.length} photo{shots.length === 1 ? '' : 's'} you uploaded.
-                    Anything it can read off them appears in these fields and in the description
-                    on the next step. Everything stays editable.
-                  </div>
-                </div>)}
+                {thinking !== '' && STAGE[thinking] && (
+                  <span className="small faint">{STAGE[thinking][0]}…</span>)}</div>
               {unsure.length > 0 && thinking === '' && (
                 <div className="card-body" style={{ paddingBottom: 0 }}>
                   <div className="note small">
@@ -549,7 +611,7 @@ export default function Launch() {
             <span className="spacer" />
             {step < 4
               ? <button className="btn btn-primary btn-sm" disabled={!canNext}
-                  onClick={() => { if (step === 0) autoAnalyse(); setStep(step + 1); }}>Continue</button>
+                  onClick={() => { if (step === 0) runPipeline(); setStep(step + 1); }}>Continue</button>
               : <button className="btn btn-primary btn-sm" disabled={saving} onClick={finish}>
                   {saving ? 'Creating…' : 'Create the product'}</button>}
           </div>
