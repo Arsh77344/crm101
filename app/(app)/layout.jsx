@@ -31,6 +31,7 @@ const NAV = [
   ['Marketing', [
     ['/campaigns', 'Campaigns', '◈'],
     ['/generate', 'Build a campaign', '✧'],
+    ['/looks', 'Look library', '◇'],
     ['/calendar', 'Content calendar', '▦'],
     ['/performance', 'Performance', '◢'],
     ['/links', 'Tracked links', '⇗'],

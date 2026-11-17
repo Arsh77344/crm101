@@ -26,6 +26,7 @@ const IMAGERY = [
   ['Clean', 'Clean cut-outs', 'Same garment, background removed, even lighting.'],
   ['Mannequin', 'AI mannequin', 'Draped on an invisible mannequin. No person.'],
   ['Model', 'AI model', 'Worn by a generated model. Slowest and most expensive.'],
+  ['Editorial', 'Editorial shoot', 'Built from a look in your library. Each frame a different angle of the same scene.'],
 ];
 
 export default function Launch() {
@@ -42,7 +43,7 @@ export default function Launch() {
     fabric: '', colour: '', weave_or_motif: '', stock_qty: 1, moq: 1,
     cost_price: '', retail_price: '', wholesale_price: '',
   });
-  const [imagery, setImagery] = useState({ mode: 'Clean', count: 3, provider: 'openai' });
+  const [imagery, setImagery] = useState({ mode: 'Clean', count: 3, provider: 'openai', look_id: '' });
   const [words, setWords] = useState({ description: '', tags: '', brief: '', highlights: '' });
   const [keys, setKeys] = useState(null);
   const [thinking, setThinking] = useState('');
@@ -59,13 +60,16 @@ export default function Launch() {
   }, []);
 
   const q = useQuery(async (c) => {
-    const [jobs, integrations] = await Promise.all([
+    const [jobs, integrations, looks] = await Promise.all([
       c.from('launch_jobs').select('*,products(product_id,public_product_name,internal_sku)')
         .order('created_at', { ascending: false }).limit(25),
       c.from('integrations').select('provider,status'),
+      c.from('looks').select('look_id,name,source,use_for,status,reference_url')
+        .eq('status', 'Ready').order('created_at', { ascending: false }),
     ]);
     if (jobs.error) throw jobs.error;
-    return { jobs: jobs.data || [], integrations: integrations.data || [] };
+    return { jobs: jobs.data || [], integrations: integrations.data || [],
+             looks: (looks.data || []).filter((l) => l.use_for !== 'Campaign') };
   }, []);
 
   const ints = q.data?.integrations || [];
@@ -151,6 +155,7 @@ export default function Launch() {
     try {
       const out = await assist({
         action: 'images', provider: 'gemini', mode: imagery.mode, count: imagery.count,
+        look_id: imagery.mode === 'Editorial' ? imagery.look_id : null,
         piece, images: shots.map((s) => s.url),
       });
       setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
@@ -242,9 +247,11 @@ export default function Launch() {
             is_primary: i === 0, bytes: s.bytes, width: s.width, height: s.height,
           })),
           ...kept.map((m) => ({
-            product_id: product.product_id, image_role: `Generated (${m.mode})`,
+            product_id: product.product_id,
+            image_role: m.look_name ? `Editorial (${m.look_name})` : `Generated (${m.mode})`,
             original_filename: m.path.split('/').pop(), storage_path: m.path, public_url: m.url,
             is_primary: false, bytes: m.bytes,
+            generated: true, shot_angle: m.shot_angle || null, source_look_id: m.look_id || null,
           })),
         ];
         const { error } = await (await import('@/lib/db')).sb().from('product_images').insert(rows);
@@ -419,11 +426,38 @@ export default function Launch() {
                       <span className="hint">{providerHint(imagery.provider)}</span></div>
                   </div>)}
 
+                {imagery.mode === 'Editorial' && (
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label>Which look</label>
+                    {(q.data?.looks || []).length === 0
+                      ? (
+                        <div className="note small">
+                          No readable looks yet. Add references on the <strong>Look library</strong> page
+                          and read one, then it appears here.
+                        </div>)
+                      : (
+                        <>
+                          <select value={imagery.look_id}
+                            onChange={(e) => setImagery({ ...imagery, look_id: e.target.value })}>
+                            <option value="">Choose a look…</option>
+                            {(q.data?.looks || []).map((l) => (
+                              <option key={l.look_id} value={l.look_id}>
+                                {l.name}{l.source === 'Found' ? ' — direction only' : ''}</option>))}
+                          </select>
+                          <span className="hint">
+                            Each frame is a different angle of the same scene. The first sets the
+                            woman and the location; the rest are given that frame so the set holds
+                            together — faces still drift between takes, so expect to regenerate.
+                          </span>
+                        </>)}
+                  </div>)}
+
                 {imagery.mode !== 'None' && (
                   <div style={{ marginTop: 14 }}>
                     <div className="row wrap" style={{ gap: 8 }}>
                       <button className="btn btn-primary btn-sm" onClick={runImages}
-                        disabled={thinking !== '' || shots.length === 0 || !keys?.gemini}
+                        disabled={thinking !== '' || shots.length === 0 || !keys?.gemini
+                          || (imagery.mode === 'Editorial' && !imagery.look_id)}
                         title={keys?.gemini ? 'Generates from the photos you uploaded' : 'Needs a Gemini key'}>
                         {thinking === 'images'
                           ? 'Generating…'
@@ -434,6 +468,8 @@ export default function Launch() {
                           {made.filter((m) => m.use).length} of {made.length} kept
                         </span>)}
                       {shots.length === 0 && <span className="small faint">Upload a photo first.</span>}
+                      {imagery.mode === 'Editorial' && !imagery.look_id && (q.data?.looks || []).length > 0
+                        && <span className="small faint">Choose a look first.</span>}
                       {keys && !keys.gemini && (
                         <span className="small faint">
                           Generated imagery needs a Gemini key. ChatGPT and Claude do not produce
