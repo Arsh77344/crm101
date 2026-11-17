@@ -245,12 +245,13 @@ export default function Launch() {
             product_id: product.product_id, image_role: i === 0 ? 'Primary' : 'Gallery',
             original_filename: s.name, storage_path: s.path, public_url: s.url,
             is_primary: i === 0, bytes: s.bytes, width: s.width, height: s.height,
+            generated: false, shot_angle: null, source_look_id: null,
           })),
           ...kept.map((m) => ({
             product_id: product.product_id,
             image_role: m.look_name ? `Editorial (${m.look_name})` : `Generated (${m.mode})`,
             original_filename: m.path.split('/').pop(), storage_path: m.path, public_url: m.url,
-            is_primary: false, bytes: m.bytes,
+            is_primary: false, bytes: m.bytes, width: null, height: null,
             generated: true, shot_angle: m.shot_angle || null, source_look_id: m.look_id || null,
           })),
         ];
