@@ -8,6 +8,7 @@ import { assist, checkKeys, PROVIDERS, NO_KEYS, SECRET_NAME,
 import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/components/ui';
 import Sheet from '@/components/Sheet';
 import { PRODUCT_SHEET } from '@/lib/schemas';
+import { useLightbox } from '@/components/Lightbox';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
 const STAGES = ['Photos', 'Imagery', 'Copy', 'Pricing', 'Review', 'Published'];
@@ -51,6 +52,7 @@ export default function Launch() {
   const [bulk, setBulk] = useState(false);
   const [made, setMade] = useState([]);
   const [unsure, setUnsure] = useState([]);
+  const enlarge = useLightbox();
 
   useEffect(() => {
     checkKeys().then((k) => {
@@ -473,8 +475,8 @@ export default function Launch() {
                         && <span className="small faint">Choose a look first.</span>}
                       {keys && !keys.gemini && (
                         <span className="small faint">
-                          Generated imagery needs a Gemini key. ChatGPT and Claude do not produce
-                          images here, whichever model you picked above for the words.
+                          Generated imagery needs a Gemini key. ChatGPT, Claude and Groq do not
+                          produce images at all, whichever you picked above for the words.
                         </span>)}
                     </div>
 
@@ -482,10 +484,15 @@ export default function Launch() {
                       <>
                         <div className="shots" style={{ marginTop: 12 }}>
                           {made.map((m) => (
-                            <div className="shot" key={m.path}
+                            <div className="shot clickable" key={m.path}
                               style={{ opacity: m.use ? 1 : 0.4,
                                        outline: m.use ? '2px solid var(--accent)' : 'none' }}>
-                              <img src={m.url} alt="" />
+                              <img src={m.url} alt="" title="Click to enlarge"
+                                onClick={() => enlarge(made.map((x) => ({
+                                  public_url: x.url, generated: true,
+                                  image_role: x.look_name ? `Editorial (${x.look_name})` : `Generated (${x.mode})`,
+                                  shot_angle: x.shot_angle,
+                                })), made.indexOf(m))} />
                               <button onClick={() => dropMade(m.path)} title="Delete this one">×</button>
                               <button title={m.use ? 'Keep it out of the listing' : 'Use it in the listing'}
                                 onClick={() => setMade((xs) => xs.map((x) =>

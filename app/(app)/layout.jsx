@@ -6,6 +6,7 @@ import { useSession, canManage } from '@/lib/session';
 import { sb } from '@/lib/db';
 import { initials } from '@/components/ui';
 import Search from '@/components/Search';
+import { LightboxProvider } from '@/components/Lightbox';
 
 const NAV = [
   ['Sell', [
@@ -92,6 +93,7 @@ export default function WorkspaceLayout({ children }) {
   const here = clean(path || '/');
 
   return (
+    <LightboxProvider>
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
@@ -137,5 +139,6 @@ export default function WorkspaceLayout({ children }) {
         {children}
       </main>
     </div>
+    </LightboxProvider>
   );
 }

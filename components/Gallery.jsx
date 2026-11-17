@@ -3,9 +3,11 @@ import { useRef, useState } from 'react';
 import { useQuery, sb, removeRow, updateRow } from '@/lib/db';
 import { uploadImage, deleteImage } from '@/lib/upload';
 import { Loading, ErrorNote } from './ui';
+import { useLightbox } from './Lightbox';
 
 export default function Gallery({ productId }) {
   const fileRef = useRef(null);
+  const enlarge = useLightbox();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -73,8 +75,9 @@ export default function Gallery({ productId }) {
           : (
             <div className="shots" style={{ marginBottom: 10 }}>
               {imgs.map((im) => (
-                <div className="shot" key={im.image_id} title={im.is_primary ? 'Main image' : 'Click the star to make this the main image'}>
-                  <img src={im.public_url} alt="" />
+                <div className="shot clickable" key={im.image_id}
+                  title={im.is_primary ? 'Main image' : 'Click the star to make this the main image'}>
+                  <img src={im.public_url} alt="" onClick={() => enlarge(imgs, imgs.indexOf(im))} />
                   <button onClick={() => drop(im)} disabled={busy} title="Remove">×</button>
                   {!im.is_primary && (
                     <button onClick={() => makePrimary(im)} disabled={busy} title="Make main"

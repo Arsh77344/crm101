@@ -3,9 +3,11 @@ import CrudPage from '@/components/CrudPage';
 import Gallery from '@/components/Gallery';
 import Children from '@/components/Children';
 import { money } from '@/components/ui';
+import { useLightbox } from '@/components/Lightbox';
 import { PRODUCT_SHEET } from '@/lib/schemas';
 
 export default function Products() {
+  const enlarge = useLightbox();
   return <CrudPage cfg={{
     table: 'products', pk: 'product_id', title: 'Products', singular: 'product',
     sub: (r) => `${r.length} pieces in the catalogue · ${r.filter((p) => p.status === 'Published').length} live`,
@@ -65,8 +67,14 @@ export default function Products() {
     ],
     columns: [
       { key: 'product_images', label: '', render: (r) => {
-        const img = (r.product_images || []).find((i) => i.is_primary) || (r.product_images || [])[0];
-        return <div className="thumb">{img ? <img src={img.public_url} alt="" /> : (r.colour || '—').slice(0, 3)}</div>;
+        const all = r.product_images || [];
+        const img = all.find((i) => i.is_primary) || all[0];
+        if (!img) return <div className="thumb">{(r.colour || '—').slice(0, 3)}</div>;
+        return (
+          <div className="thumb clickable" title="Click to enlarge"
+            onClick={() => enlarge(all, all.indexOf(img))}>
+            <img src={img.public_url} alt="" />
+          </div>);
       } },
       { key: 'public_product_name', label: 'Product' },
       { key: 'internal_sku', label: 'SKU' },
