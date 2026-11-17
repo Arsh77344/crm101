@@ -339,6 +339,19 @@ export default function Launch() {
                   <div className="small faint">JPEG, PNG, WebP or HEIC. The first one becomes the main image.</div>
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" multiple onChange={addFiles} style={{ display: 'none' }} />
+
+                <div className="field" style={{ marginTop: 14, maxWidth: 340 }}>
+                  <label>Which model reads these photos</label>
+                  <select value={imagery.provider}
+                    onChange={(e) => setImagery({ ...imagery, provider: e.target.value })}>
+                    {PROVIDERS.map(([k]) => (
+                      <option key={k} value={k}>{providerOption(k, keys)}</option>))}
+                  </select>
+                  <span className="hint">
+                    {providerHint(imagery.provider)} Continue starts the reading, so pick before
+                    you press it. Generated imagery always uses Gemini, whichever you choose here.
+                  </span>
+                </div>
                 {shots.length > 0 && (
                   <div className="shots" style={{ marginTop: 14 }}>
                     {shots.map((s) => (
