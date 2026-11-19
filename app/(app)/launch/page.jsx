@@ -9,6 +9,7 @@ import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/component
 import Sheet from '@/components/Sheet';
 import { PRODUCT_SHEET } from '@/lib/schemas';
 import { useLightbox } from '@/components/Lightbox';
+import { partFromName, partGaps, PART_OPTIONS } from '@/lib/parts';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
 const STAGES = ['Photos', 'Imagery', 'Copy', 'Pricing', 'Review', 'Published'];
@@ -23,12 +24,12 @@ const STAGE = {
 };
 
 const IMAGERY = [
-  ['None', 'Keep my photos', 'Use the shots as they are. Nothing generated.'],
-  ['Clean', 'Clean cut-outs', 'Same garment, background removed, even lighting.'],
+  ['Clean', 'Clean cut-outs', 'Garment on white, background removed, even lighting.'],
   ['Mannequin', 'AI mannequin', 'Draped on an invisible mannequin. No person.'],
-  ['Model', 'AI model', 'Worn by a generated model. Slowest and most expensive.'],
-  ['Editorial', 'Editorial shoot', 'Built from a look in your library. Each frame a different angle of the same scene.'],
+  ['Model', 'AI model', 'Worn by a generated model. Slower and dearer.'],
+  ['Editorial', 'Editorial shoot', 'Built from a look in your library. Needs a look chosen.'],
 ];
+const NO_COUNTS = { Clean: 0, Mannequin: 0, Model: 0, Editorial: 0 };
 
 export default function Launch() {
   const [err, setErr] = useState('');
@@ -44,7 +45,7 @@ export default function Launch() {
     fabric: '', colour: '', weave_or_motif: '', stock_qty: 1, moq: 1,
     cost_price: '', retail_price: '', wholesale_price: '',
   });
-  const [imagery, setImagery] = useState({ mode: 'Clean', count: 3, provider: 'openai', look_id: '', tweak: '' });
+  const [imagery, setImagery] = useState({ counts: { ...NO_COUNTS }, provider: 'openai', look_id: '', tweak: '' });
   const [words, setWords] = useState({ description: '', tags: '', brief: '', highlights: '' });
   const [keys, setKeys] = useState(null);
   const [thinking, setThinking] = useState('');
@@ -110,7 +111,8 @@ export default function Launch() {
     try {
       setThinking('copy');
       const out = await assist({ action: 'copy', provider: imagery.provider,
-        piece: current, brief: words.brief, images: urls });
+        piece: current, brief: words.brief, images: urls,
+        parts: shots.map((x) => x.part || 'Unlabelled') });
       const r = out.result || {};
       const ob = r.observed || {};
       current = {
@@ -143,7 +145,8 @@ export default function Launch() {
       try {
         setThinking('rewrite');
         const out = await assist({ action: 'copy', provider: imagery.provider,
-          piece: current, brief: words.brief, images: urls, research: found });
+          piece: current, brief: words.brief, images: urls, research: found,
+          parts: shots.map((x) => x.part || 'Unlabelled') });
         const r = out.result || {};
         applyWords(r);
         if (r.uncertain) setUnsure(r.uncertain);
@@ -152,20 +155,29 @@ export default function Launch() {
     setThinking('');
   }
 
+  // One pass over every style the owner asked for, rather than one style per
+  // visit to this step. Each runs on its own so a failure in one does not cost
+  // the others, and whatever did come back is kept.
   async function runImages() {
+    const wanted = IMAGERY.map(([k]) => k).filter((k) => (imagery.counts[k] || 0) > 0);
+    if (!wanted.length) return;
     setThinking('images'); setErr('');
-    try {
-      const out = await assist({
-        action: 'images', provider: 'gemini', mode: imagery.mode, count: imagery.count,
-        look_id: imagery.mode === 'Editorial' ? imagery.look_id : null,
-        tweak: imagery.tweak,
-        piece, images: shots.map((s) => s.url),
-      });
-      setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
-      if ((out.failed || []).length) {
-        setErr(`${out.images.length} came back, ${out.failed.length} failed: ${out.failed[0]}`);
+    const trouble = [];
+    for (const mode of wanted) {
+      try {
+        const out = await assist({
+          action: 'images', provider: 'gemini', mode, count: imagery.counts[mode],
+          look_id: mode === 'Editorial' ? imagery.look_id : null,
+          tweak: imagery.tweak, piece,
+          images: shots.map((s) => s.url), parts: shots.map((s) => s.part || 'Unlabelled'),
+        });
+        setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
+        (out.failed || []).forEach((f) => trouble.push(`${mode}: ${f}`));
+      } catch (e2) {
+        trouble.push(`${mode}: ${e2.message || e2}`);
       }
-    } catch (e2) { setErr(e2.message || String(e2)); }
+    }
+    if (trouble.length) setErr(trouble.join(' · '));
     setThinking('');
   }
 
@@ -180,6 +192,7 @@ export default function Launch() {
       const out = await assist({
         action: 'copy', provider: imagery.provider,
         piece, brief: words.brief, images: shots.map((s) => s.url),
+        parts: shots.map((s) => s.part || 'Unlabelled'),
       });
       const r = out.result || {};
       setWords((w) => ({
@@ -220,7 +233,7 @@ export default function Launch() {
     try {
       for (const f of files) {
         const up = await uploadImage(f, 'inbox');
-        setShots((s) => [...s, up]);
+        setShots((s) => [...s, { ...up, part: partFromName(f.name) }]);
       }
     } catch (e2) { setErr(e2.message || String(e2)); }
     setUploading(false);
@@ -249,6 +262,7 @@ export default function Launch() {
             original_filename: s.name, storage_path: s.path, public_url: s.url,
             is_primary: i === 0, bytes: s.bytes, width: s.width, height: s.height,
             generated: false, shot_angle: null, source_look_id: null,
+            part: s.part || null,
           })),
           ...kept.map((m) => ({
             product_id: product.product_id,
@@ -256,27 +270,32 @@ export default function Launch() {
             original_filename: m.path.split('/').pop(), storage_path: m.path, public_url: m.url,
             is_primary: false, bytes: m.bytes, width: null, height: null,
             generated: true, shot_angle: m.shot_angle || null, source_look_id: m.look_id || null,
+            part: null,
           })),
         ];
         const { error } = await (await import('@/lib/db')).sb().from('product_images').insert(rows);
         if (error) throw error;
       }
+      const byMode = kept.reduce((acc, m) => {
+        acc[m.mode] = (acc[m.mode] || 0) + 1; return acc;
+      }, {});
+      const madeLine = Object.entries(byMode).map(([m, n]) => `${n} × ${m.toLowerCase()}`).join(', ');
       const note = [
-        `${shots.length} photo${shots.length === 1 ? '' : 's'} uploaded.`,
-        imagery.mode === 'None' ? 'Using the photos as shot.'
-          : kept.length ? `${kept.length} × ${imagery.mode.toLowerCase()} image${kept.length === 1 ? '' : 's'} generated and kept.`
-          : `No ${imagery.mode.toLowerCase()} images generated.`,
+        `${shots.length} photo${shots.length === 1 ? '' : 's'} uploaded`
+          + (shots.some((x) => x.part && x.part !== 'Unlabelled')
+            ? ` (${shots.map((x) => x.part).filter(Boolean).join(', ')}).` : '.'),
+        madeLine ? `Kept ${madeLine}.` : 'No images generated.',
         words.brief ? `Brief: ${words.brief}` : '',
       ].filter(Boolean).join(' ');
       await insertRow('launch_jobs', {
         product_id: product.product_id,
-        stage: imagery.mode === 'None' ? 'Copy' : 'Imagery',
+        stage: kept.length ? 'Copy' : 'Imagery',
         status: aiReady ? 'Queued' : 'Blocked',
         message: aiReady ? note : `${note} Waiting on an AI key before anything can be generated.`,
       });
       setDone(product);
       setShots([]); setMade([]); setResearch(null); setStep(0);
-      setImagery((im) => ({ ...im, tweak: '', look_id: '' }));
+      setImagery((im) => ({ ...im, tweak: '', look_id: '', counts: { ...NO_COUNTS } }));
       setPiece({ public_product_name: '', internal_sku: '', category: 'Banarasi Saree', fabric: '', colour: '',
         weave_or_motif: '', stock_qty: 1, moq: 1, cost_price: '', retail_price: '', wholesale_price: '' });
       setWords({ description: '', tags: '', brief: '', highlights: '' });
@@ -285,12 +304,15 @@ export default function Launch() {
     setSaving(false);
   }
 
+  const wantedTotal = IMAGERY.reduce((n, [k]) => n + (imagery.counts[k] || 0), 0);
   const gaps = [
     !words.description && 'No description. Go back and press "Write the description", or type one in.',
     !piece.retail_price && 'No retail price. "Find comparable prices" suggests one, or set it yourself.',
     !piece.cost_price && 'No agreed cost, so contribution cannot be worked out and the partner payable will be wrong.',
-    imagery.mode !== 'None' && made.length === 0
-      && `No ${imagery.mode.toLowerCase()} images generated yet — press Generate on the Imagery step.`,
+    wantedTotal > 0 && made.length === 0
+      && `${wantedTotal} image${wantedTotal === 1 ? '' : 's'} asked for but none generated yet — press Generate on the Imagery step.`,
+    shots.some((x) => x.part === 'Unlabelled')
+      && 'Some photos are not labelled with the part they show, so the model has to guess.',
     !aiReady && 'No AI key is set, so none of the generated steps can run at all.',
   ].filter(Boolean);
 
@@ -355,13 +377,45 @@ export default function Launch() {
                   </span>
                 </div>
                 {shots.length > 0 && (
-                  <div className="shots" style={{ marginTop: 14 }}>
-                    {shots.map((s) => (
-                      <div className="shot" key={s.path}>
-                        <img src={s.url} alt={s.name} />
-                        <button onClick={() => dropShot(s.path)} title="Remove">×</button>
-                      </div>))}
-                  </div>)}
+                  <>
+                    <div className="shots" style={{ marginTop: 14, gap: 12 }}>
+                      {shots.map((sh) => (
+                        <div key={sh.path} style={{ width: 132 }}>
+                          <div className="shot clickable" style={{ width: 132, height: 150 }}>
+                            <img src={sh.url} alt={sh.name} title={sh.name}
+                              onClick={() => enlarge(shots.map((x) => ({
+                                public_url: x.url, image_role: x.part || 'Photo',
+                              })), shots.indexOf(sh))} />
+                            <button onClick={() => dropShot(sh.path)} title="Remove">×</button>
+                          </div>
+                          <select value={sh.part || 'Unlabelled'} style={{ marginTop: 5, width: '100%' }}
+                            onChange={(e) => setShots((xs) => xs.map((x) =>
+                              x.path === sh.path ? { ...x, part: e.target.value } : x))}>
+                            {[...new Set([...PART_OPTIONS, sh.part || 'Unlabelled'])].map((o) => (
+                              <option key={o} value={o}>{o}</option>))}
+                          </select>
+                        </div>))}
+                    </div>
+
+                    {(() => {
+                      const holes = partGaps(shots.map((x) => x.part || 'Unlabelled'));
+                      return holes.length === 0
+                        ? (
+                          <div className="note plain small" style={{ marginTop: 12 }}>
+                            Every photo is labelled and the set covers the whole piece. The model is
+                            told which photograph is which part, so it assembles the real garment
+                            rather than inventing the parts it cannot see.
+                          </div>)
+                        : (
+                          <div className="note small" style={{ marginTop: 12 }}>
+                            <strong>Worth fixing before you generate.</strong> Read from the file
+                            names; correct any that are wrong.
+                            <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                              {holes.map((h) => <li key={h}>{h}</li>)}
+                            </ul>
+                          </div>);
+                    })()}
+                  </>)}
               </div>
             </>
           )}
@@ -416,37 +470,47 @@ export default function Launch() {
             <>
               <div className="card-head"><h3>What images do you want made?</h3></div>
               <div className="card-body">
-                <div className="grid g2" style={{ marginBottom: 14 }}>
+                <div className="stack" style={{ gap: 8, marginBottom: 14 }}>
                   {IMAGERY.map(([key, title, blurb]) => (
-                    <button key={key} onClick={() => setImagery({ ...imagery, mode: key })}
-                      className="card" style={{
-                        padding: 12, textAlign: 'left', cursor: 'pointer',
-                        borderColor: imagery.mode === key ? 'var(--accent)' : 'var(--line)',
-                        background: imagery.mode === key ? 'var(--accent-wash)' : 'var(--panel)',
-                      }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
-                      <div className="small muted" style={{ marginTop: 2 }}>{blurb}</div>
-                    </button>))}
+                    <div key={key} className="row" style={{
+                      gap: 12, padding: '10px 12px', border: '1px solid var(--line)',
+                      borderRadius: 8,
+                      borderColor: (imagery.counts[key] || 0) > 0 ? 'var(--accent)' : 'var(--line)',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
+                        <div className="small muted" style={{ marginTop: 2 }}>{blurb}</div>
+                      </div>
+                      <select value={imagery.counts[key] || 0} style={{ width: 78 }}
+                        onChange={(e) => setImagery({
+                          ...imagery,
+                          counts: { ...imagery.counts, [key]: Number(e.target.value) },
+                        })}>
+                        {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>))}
                 </div>
 
-                {imagery.mode !== 'None' && (
-                  <div className="form-grid">
-                    <div className="field"><label>How many images</label>
-                      <select value={imagery.count} onChange={(e) => setImagery({ ...imagery, count: Number(e.target.value) })}>
-                        {[1, 2, 3, 4, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                      <span className="hint">More images cost more and take longer.</span></div>
-                    <div className="field"><label>Which model does the work</label>
-                      <select value={imagery.provider} onChange={(e) => setImagery({ ...imagery, provider: e.target.value })}>
-                        {PROVIDERS.map(([k]) => (
-                          <option key={k} value={k}>{providerOption(k, keys)}</option>))}
-                      </select>
-                      <span className="hint">{providerHint(imagery.provider)}</span></div>
-                  </div>)}
+                <div className="row small" style={{ marginBottom: 12 }}>
+                  <strong>{wantedTotal} image{wantedTotal === 1 ? '' : 's'}</strong>
+                  <span className="muted" style={{ marginLeft: 6 }}>
+                    in this run{wantedTotal === 0 ? ' — set a number above' : '. Each one costs.'}
+                  </span>
+                </div>
 
-                {imagery.mode === 'Editorial' && (
+                <div className="field" style={{ maxWidth: 340 }}>
+                  <label>Which model writes the words</label>
+                  <select value={imagery.provider}
+                    onChange={(e) => setImagery({ ...imagery, provider: e.target.value })}>
+                    {PROVIDERS.map(([k]) => (
+                      <option key={k} value={k}>{providerOption(k, keys)}</option>))}
+                  </select>
+                  <span className="hint">{providerHint(imagery.provider)} Images always use Gemini.</span>
+                </div>
+
+                {(imagery.counts.Editorial || 0) > 0 && (
                   <div className="field" style={{ marginTop: 12 }}>
-                    <label>Which look</label>
+                    <label>Which look for the editorial frames</label>
                     {(q.data?.looks || []).length === 0
                       ? (
                         <div className="note small">
@@ -470,9 +534,9 @@ export default function Launch() {
                         </>)}
                   </div>)}
 
-                {imagery.mode !== 'None' && (
+                {wantedTotal > 0 && (
                   <div className="field" style={{ marginTop: 12 }}>
-                    <label>Anything to change about this shot <span className="faint">(optional)</span></label>
+                    <label>Anything to change about these shots <span className="faint">(optional)</span></label>
                     <textarea value={imagery.tweak} style={{ minHeight: 64 }}
                       placeholder="Warmer light, late afternoon. Plain stone wall behind her instead. Marigolds rather than roses. Make it more dramatic."
                       onChange={(e) => setImagery({ ...imagery, tweak: e.target.value })} />
@@ -484,24 +548,24 @@ export default function Launch() {
                     </span>
                   </div>)}
 
-                {imagery.mode !== 'None' && (
+                {wantedTotal > 0 && (
                   <div style={{ marginTop: 14 }}>
                     <div className="row wrap" style={{ gap: 8 }}>
                       <button className="btn btn-primary btn-sm" onClick={runImages}
                         disabled={thinking !== '' || shots.length === 0 || !keys?.gemini
-                          || (imagery.mode === 'Editorial' && !imagery.look_id)}
+                          || ((imagery.counts.Editorial || 0) > 0 && !imagery.look_id)}
                         title={keys?.gemini ? 'Generates from the photos you uploaded' : 'Needs a Gemini key'}>
                         {thinking === 'images'
                           ? 'Generating…'
-                          : `Generate ${imagery.count} × ${imagery.mode.toLowerCase()}`}
+                          : `Generate all ${wantedTotal} image${wantedTotal === 1 ? '' : 's'}`}
                       </button>
                       {made.length > 0 && (
                         <span className="small faint">
                           {made.filter((m) => m.use).length} of {made.length} kept
                         </span>)}
                       {shots.length === 0 && <span className="small faint">Upload a photo first.</span>}
-                      {imagery.mode === 'Editorial' && !imagery.look_id && (q.data?.looks || []).length > 0
-                        && <span className="small faint">Choose a look first.</span>}
+                      {(imagery.counts.Editorial || 0) > 0 && !imagery.look_id && (q.data?.looks || []).length > 0
+                        && <span className="small faint">Choose a look for the editorial frames first.</span>}
                       {keys && !keys.gemini && (
                         <span className="small faint">
                           Generated imagery needs a Gemini key. ChatGPT, Claude and Groq do not
@@ -655,8 +719,8 @@ export default function Launch() {
                     <div className="small" style={{ marginTop: 8 }}>{words.description || 'No description yet.'}</div>
                     <div className="row wrap" style={{ marginTop: 10, gap: 6 }}>
                       <span className="badge">{shots.length} photos</span>
-                      <span className="badge">{imagery.mode === 'None' ? 'No generated imagery'
-                        : `${imagery.count} × ${imagery.mode}`}</span>
+                      <span className="badge">{made.length === 0 ? 'No generated imagery'
+                        : `${made.filter((m) => m.use).length} generated kept`}</span>
                       <span className="badge">Retail {money(piece.retail_price)}</span>
                       <span className="badge">Stock {piece.stock_qty}</span>
                     </div>
@@ -718,7 +782,9 @@ export default function Launch() {
             <div className="card-body stack" style={{ gap: 9 }}>
               {[
                 ['Photos', `${shots.length} uploaded`],
-                ['Imagery', imagery.mode === 'None' ? 'Skipped' : `${imagery.count} × ${imagery.mode}`],
+                ['Imagery', wantedTotal === 0 ? 'Skipped'
+                  : IMAGERY.map(([k]) => [k, imagery.counts[k] || 0]).filter(([, n]) => n > 0)
+                    .map(([k, n]) => `${n} × ${k.toLowerCase()}`).join(', ')],
                 ['Copy', words.description ? 'Written' : aiReady ? 'Ready to draft' : 'Waiting on a key'],
                 ['Pricing', piece.retail_price ? `Set at ${money(piece.retail_price)}`
                   : research ? `Suggested ${money(research.suggested)}` : 'Not set'],
