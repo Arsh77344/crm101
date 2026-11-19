@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, insertRow, updateRow } from '@/lib/db';
-import { uploadImage, deleteImage } from '@/lib/upload';
+import { uploadImage, deleteImage, renameImage, altFor, nameFor } from '@/lib/upload';
 import { assist, checkKeys, PROVIDERS, NO_KEYS, SECRET_NAME,
   providerLabel, providerOption, providerHint, hasKey, anyKey, firstWithKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/components/ui';
@@ -68,15 +68,18 @@ export default function Launch() {
   }, []);
 
   const q = useQuery(async (c) => {
-    const [jobs, integrations, looks] = await Promise.all([
+    const [jobs, integrations, looks, lookUse] = await Promise.all([
       c.from('launch_jobs').select('*,products(product_id,public_product_name,internal_sku)')
         .order('created_at', { ascending: false }).limit(25),
       c.from('integrations').select('provider,status'),
-      c.from('looks').select('look_id,name,source,use_for,status,reference_url')
-        .eq('status', 'Ready').order('created_at', { ascending: false }),
+      c.from('looks').select('look_id,look_no,name,summary,source,use_for,status,reference_url')
+        .eq('status', 'Ready').order('look_no', { ascending: true }),
+      c.from('look_usage').select('look_id,products_used_on,images_made,products'),
     ]);
     if (jobs.error) throw jobs.error;
-    return { jobs: jobs.data || [], integrations: integrations.data || [],
+    const byLook = {};
+    (lookUse.data || []).forEach((u) => { byLook[u.look_id] = u; });
+    return { jobs: jobs.data || [], integrations: integrations.data || [], lookUse: byLook,
              looks: (looks.data || []).filter((l) => l.use_for !== 'Campaign') };
   }, []);
 
@@ -272,23 +275,36 @@ export default function Launch() {
       });
       const kept = made.filter((m) => m.use);
       if (shots.length || kept.length) {
-        const rows = [
-          ...shots.map((s, i) => ({
-            product_id: product.product_id, image_role: i === 0 ? 'Primary' : 'Gallery',
-            original_filename: s.name, storage_path: s.path, public_url: s.url,
-            is_primary: i === 0, bytes: s.bytes, width: s.width, height: s.height,
-            generated: false, shot_angle: null, source_look_id: null,
-            part: s.part || null,
-          })),
-          ...kept.map((m) => ({
-            product_id: product.product_id,
-            image_role: m.look_name ? `Editorial (${m.look_name})` : `Generated (${m.mode})`,
-            original_filename: m.path.split('/').pop(), storage_path: m.path, public_url: m.url,
-            is_primary: false, bytes: m.bytes, width: null, height: null,
-            generated: true, shot_angle: m.shot_angle || null, source_look_id: m.look_id || null,
-            part: null,
-          })),
+        // The piece has a name at last, so the files get one too, and every row
+        // gets the sentence a screen reader will read out.
+        const all = [
+          ...shots.map((x, i) => ({ ...x, generated: false, primary: i === 0 })),
+          ...kept.map((x) => ({ ...x, generated: true, primary: false })),
         ];
+        const seen = {};
+        const renamed = [];
+        for (const img of all) {
+          const kind = img.generated ? (img.look_name ? 'editorial' : img.mode) : (img.part || 'photo');
+          seen[kind] = (seen[kind] || 0) + 1;
+          const target = nameFor(piece, img, seen[kind]);
+          const moved = await renameImage(img.path, target);
+          renamed.push({ ...img, path: moved.path, url: moved.url });
+        }
+
+        const rows = renamed.map((x) => (x.generated ? {
+          product_id: product.product_id,
+          image_role: x.look_name ? `Editorial (${x.look_name})` : `Generated (${x.mode})`,
+          original_filename: x.path.split('/').pop(), storage_path: x.path, public_url: x.url,
+          is_primary: false, bytes: x.bytes, width: null, height: null,
+          generated: true, shot_angle: x.shot_angle || null, source_look_id: x.look_id || null,
+          part: null, alt_text: altFor(piece, x),
+        } : {
+          product_id: product.product_id, image_role: x.primary ? 'Primary' : 'Gallery',
+          original_filename: x.path.split('/').pop(), storage_path: x.path, public_url: x.url,
+          is_primary: x.primary, bytes: x.bytes, width: x.width, height: x.height,
+          generated: false, shot_angle: null, source_look_id: null,
+          part: x.part || null, alt_text: altFor(piece, x),
+        }));
         const { error } = await (await import('@/lib/db')).sb().from('product_images').insert(rows);
         if (error) throw error;
       }
@@ -577,9 +593,17 @@ export default function Launch() {
                           <select value={imagery.look_id}
                             onChange={(e) => setImagery({ ...imagery, look_id: e.target.value })}>
                             <option value="">Choose a look…</option>
-                            {(q.data?.looks || []).map((l) => (
-                              <option key={l.look_id} value={l.look_id}>
-                                {l.name}{l.source === 'Found' ? ' — direction only' : ''}</option>))}
+                            {(q.data?.looks || []).map((l) => {
+                              const u = (q.data?.lookUse || {})[l.look_id];
+                              return (
+                                <option key={l.look_id} value={l.look_id}>
+                                  {`#${l.look_no} · ${l.name}`}
+                                  {l.summary ? ` — ${l.summary}` : ''}
+                                  {u?.images_made
+                                    ? ` [used on ${u.products_used_on} piece${u.products_used_on === 1 ? '' : 's'}]`
+                                    : ' [unused]'}
+                                </option>);
+                            })}
                           </select>
                           <span className="hint">
                             Each frame is a different angle of the same scene. The first sets the

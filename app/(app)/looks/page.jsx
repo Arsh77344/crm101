@@ -4,6 +4,7 @@ import { useQuery, insertRow, updateRow, removeRow } from '@/lib/db';
 import { uploadImage, deleteImage } from '@/lib/upload';
 import { assist, PROVIDERS, NO_KEYS, providerOption, firstWithKey, hasKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when } from '@/components/ui';
+import { useLightbox } from '@/components/Lightbox';
 
 // What the reading produces. Editable by hand: this text, not the picture, is what
 // every future shoot is built from, so a wrong line here spreads.
@@ -24,17 +25,22 @@ export default function Looks() {
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [provider, setProvider] = useState('gemini');
+  const enlarge = useLightbox();
 
   const q = useQuery(async (c) => {
-    const [looks, keys] = await Promise.all([
-      c.from('looks').select('*').order('created_at', { ascending: false }),
+    const [looks, usage, keys] = await Promise.all([
+      c.from('looks').select('*').order('look_no', { ascending: true }),
+      c.from('look_usage').select('look_id,products_used_on,images_made,last_image_at,products'),
       assist({ action: 'health' }).catch(() => NO_KEYS),
     ]);
     if (looks.error) throw looks.error;
-    return { looks: looks.data || [], keys };
+    const used = {};
+    (usage.data || []).forEach((u) => { used[u.look_id] = u; });
+    return { looks: looks.data || [], used, keys };
   }, []);
 
   const looks = q.data?.looks || [];
+  const used = q.data?.used || {};
   const keys = q.data?.keys;
   const current = looks.find((l) => l.look_id === sel) || null;
 
@@ -56,6 +62,20 @@ export default function Looks() {
     if (fileRef.current) fileRef.current.value = '';
   }
 
+  // The reading describes a frame in eight fields. This is the one line that
+  // identifies it in a dropdown three weeks later.
+  function lineFrom(d) {
+    const clause = (t, n = 1) => String(t || '').split(/[,;.]/).slice(0, n)
+      .join(',').trim().replace(/^[a-z]/, (c) => c.toUpperCase());
+    const who = clause(d.subject);
+    const doing = clause(d.pose).replace(/^[A-Z]/, (c) => c.toLowerCase());
+    const place = clause(d.setting).replace(/^[A-Z]/, (c) => c.toLowerCase());
+    const line = [who, doing, place].filter(Boolean).join(', ');
+    // Cut on a word, never mid-word, so the fallback still reads as a sentence.
+    const cut = line.length <= 150 ? line : line.slice(0, line.lastIndexOf(' ', 150));
+    return cut.replace(/[,\s]+$/, '') + '.';
+  }
+
   async function read(look) {
     setBusy(look.look_id); setErr('');
     try {
@@ -63,8 +83,15 @@ export default function Looks() {
         action: 'look', provider, look_id: look.look_id, reference_url: look.reference_url,
       });
       const d = out.result || {};
-      if (d.name && /^Reference/i.test(look.name)) {
-        await updateRow('looks', 'look_id', look.look_id, { name: d.name });
+      const patch = {};
+      // A file name off a phone or a download is not a name. Take the model's.
+      if (d.name && (!look.name || /^(Reference|IMG|DSC|PXL|Screenshot|Gemini|WhatsApp)/i.test(look.name)
+        || /^[0-9a-f]{16,}$/i.test(look.name) || /^[-_0-9\s]+$/.test(look.name))) {
+        patch.name = d.name;
+      }
+      if (!look.summary) patch.summary = d.summary || lineFrom(d);
+      if (Object.keys(patch).length) {
+        await updateRow('looks', 'look_id', look.look_id, patch);
       }
       q.reload();
     } catch (e2) { setErr(e2.message || String(e2)); }
@@ -115,26 +142,49 @@ export default function Looks() {
               <div className="card-head"><h3>References</h3>
                 <span className="small faint">{ready} of {looks.length} read</span></div>
               <div className="card-body">
-                <div className="shots" style={{ gap: 12 }}>
-                  {looks.map((l) => (
-                    <div key={l.look_id} style={{ width: 150 }}>
-                      <div className="shot" style={{
-                        width: 150, height: 190, cursor: 'pointer',
-                        outline: sel === l.look_id ? '2px solid var(--accent)' : 'none',
-                      }} onClick={() => setSel(l.look_id === sel ? null : l.look_id)}>
-                        <img src={l.reference_url} alt="" />
-                      </div>
-                      <div className="small" style={{ marginTop: 4, fontWeight: 600 }}>{l.name}</div>
-                      <div className="row" style={{ gap: 4, marginTop: 2 }}>
-                        <Badge className={l.status === 'Ready' ? 'b-accent' : ''}>{l.status}</Badge>
-                        <span className="small faint">{l.source === 'Own' ? 'Ours' : 'Found'}</span>
-                      </div>
-                      {l.status !== 'Ready' && (
-                        <button className="btn btn-sm" style={{ marginTop: 5, width: '100%' }}
-                          disabled={busy === l.look_id || !hasKey(keys, provider)}
-                          onClick={() => read(l)}>
-                          {busy === l.look_id ? 'Reading…' : 'Read it'}</button>)}
-                    </div>))}
+                <div className="look-list">
+                  {looks.map((l) => {
+                    const u = used[l.look_id] || {};
+                    const on = (u.products || []).map((x) => x.name).filter(Boolean);
+                    return (
+                      <div key={l.look_id}
+                        className={`look-row ${sel === l.look_id ? 'on' : ''}`}
+                        onClick={() => setSel(l.look_id === sel ? null : l.look_id)}>
+                        <div className="look-no">{l.look_no ?? '—'}</div>
+                        <img className="look-thumb" src={l.reference_url} alt={l.summary || l.name}
+                          onClick={(e) => { e.stopPropagation();
+                            enlarge(looks.map((x) => ({ public_url: x.reference_url,
+                              image_role: `#${x.look_no} ${x.name}`, shot_angle: x.summary || '' })),
+                              looks.indexOf(l)); }} />
+                        <div className="look-text">
+                          <div className="look-name">{l.name}</div>
+                          <div className="small muted look-sum">
+                            {l.summary || (l.status === 'Ready'
+                              ? 'No one-line description yet — open it and write one.'
+                              : 'Not read yet.')}
+                          </div>
+                          <div className="row wrap" style={{ gap: 5, marginTop: 4 }}>
+                            <Badge>{l.status}</Badge>
+                            <span className="badge">{l.source === 'Own' ? 'Ours' : 'Found'}</span>
+                            {u.images_made > 0
+                              ? <span className="badge b-amber" title={on.join(', ')}>
+                                  Used on {u.products_used_on} piece{u.products_used_on === 1 ? '' : 's'}
+                                </span>
+                              : <span className="badge b-green">Unused</span>}
+                          </div>
+                          {on.length > 0 && (
+                            <div className="small faint" style={{ marginTop: 3 }}>
+                              {on.slice(0, 3).join(' · ')}{on.length > 3 ? ` · +${on.length - 3} more` : ''}
+                              {u.last_image_at ? ` · last ${when(u.last_image_at)}` : ''}
+                            </div>)}
+                        </div>
+                        {l.status !== 'Ready' && (
+                          <button className="btn btn-sm" style={{ flexShrink: 0 }}
+                            disabled={busy === l.look_id || !hasKey(keys, provider)}
+                            onClick={(e) => { e.stopPropagation(); read(l); }}>
+                            {busy === l.look_id ? 'Reading…' : 'Read it'}</button>)}
+                      </div>);
+                  })}
                 </div>
                 {keys && !hasKey(keys, provider) && (
                   <div className="small faint" style={{ marginTop: 10 }}>
@@ -153,14 +203,22 @@ export default function Looks() {
             {current && (
               <div className="stack">
                 <div className="card">
-                  <div className="card-head"><h3>{current.name}</h3>
+                  <div className="card-head"><h3>#{current.look_no} · {current.name}</h3>
                     <button className="btn btn-ghost btn-sm" onClick={() => setSel(null)}>Close</button></div>
                   <div className="card-body">
                     <img src={current.reference_url} alt=""
                       style={{ width: '100%', borderRadius: 8, marginBottom: 12 }} />
                     <div className="field"><label>Name</label>
                       <input defaultValue={current.name}
-                        onBlur={(e) => save(current, { name: e.target.value })} /></div>
+                        onBlur={(e) => save(current, { name: e.target.value })} />
+                      <span className="hint">Reference #{current.look_no}. A short label you
+                        will recognise in a dropdown.</span></div>
+                    <div className="field"><label>In one line</label>
+                      <textarea defaultValue={current.summary || ''} style={{ minHeight: 48 }}
+                        placeholder="A woman seated on the ghat steps, smoking, river behind her."
+                        onBlur={(e) => save(current, { summary: e.target.value })} />
+                      <span className="hint">What you would say to describe the shot. This is what
+                        shows beside the number everywhere else.</span></div>
                     <div className="grid g2">
                       <div className="field"><label>Whose photograph</label>
                         <select value={current.source}
@@ -189,7 +247,10 @@ export default function Looks() {
                         {busy === current.look_id ? 'Reading…' : current.status === 'Ready' ? 'Read it again' : 'Read it'}</button>
                       <span className="spacer" />
                       <span className="small faint">
-                        Used {current.times_used || 0}×{current.last_used_at ? ` · ${when(current.last_used_at)}` : ''}
+                        {(used[current.look_id]?.images_made || 0) === 0
+                          ? 'Not used on any piece yet.'
+                          : `${used[current.look_id].images_made} image(s) on `
+                            + `${used[current.look_id].products_used_on} piece(s).`}
                       </span>
                     </div>
                   </div>

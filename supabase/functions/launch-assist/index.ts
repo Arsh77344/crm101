@@ -177,13 +177,19 @@ Describe only what is in the frame. Do not guess a brand, a location name, or a 
 and never describe the identity or face of the person in it beyond what a casting note would say.
 Return only JSON:
 {"framing": string, "subject": string, "pose": string, "setting": string,
- "light": string, "palette": string, "mood": string, "avoid": string, "name": string}
+ "light": string, "palette": string, "mood": string, "avoid": string,
+ "name": string, "summary": string}
 "framing" is shot length, orientation and where the subject sits in frame.
 "pose" is body, arms, head and gaze.
 "setting" is the kind of place and what is behind the subject, not a named place.
 "light" is direction, hardness and time of day.
 "avoid" is what would make a recreation look wrong or cheap.
-"name" is a short memorable label for this look, under five words.`;
+"name" is a short memorable label for this look, under five words.
+"summary" is one plain sentence under twenty words naming what is in the frame, the way one person
+would describe the photograph to another: what the subject is wearing, what they are doing, and
+where. Lead with whatever makes this shot recognisable at a glance — the cigarette, the petals, the
+boats — not with the mood or the lighting. For example: "Teal silk saree, seated on sandstone steps
+with a cigarette, carved doorway behind."`;
 
 const FIDELITY = `The photographs show one real garment that a customer will actually be sent, and
 they will hold this image against the parcel. Treat the garment as a thing to be copied, not designed.

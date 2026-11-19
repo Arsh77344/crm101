@@ -310,6 +310,24 @@ input,select,textarea,button{font:inherit;color:inherit}
   flex: 0 0 auto; }
 .lb-x:hover, .lb-nav:hover { background: rgba(255,255,255,.26); }
 .thumb.clickable, .shot.clickable { cursor: zoom-in; }
+
+/* The look library reads as a numbered list: a tile grid cannot carry a name,
+   a description and where the look has already been used. */
+.look-list{display:flex;flex-direction:column;gap:8px}
+.look-row{display:flex;align-items:flex-start;gap:12px;padding:10px;border:1px solid var(--line);
+  border-radius:var(--r-sm);background:var(--panel);cursor:pointer}
+.look-row:hover{border-color:var(--ink-3)}
+.look-row.on{border-color:var(--accent);background:var(--accent-wash)}
+.look-no{flex-shrink:0;width:26px;height:26px;border-radius:6px;background:var(--line-2);
+  color:var(--ink-2);display:grid;place-items:center;font-size:12px;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.look-row.on .look-no{background:var(--accent);color:#fff}
+.look-thumb{flex-shrink:0;width:54px;height:68px;object-fit:cover;border-radius:5px;
+  background:var(--line-2);cursor:zoom-in}
+.look-text{min-width:0;flex:1}
+.look-name{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.look-sum{margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;line-clamp:2}
 .shot-flag{position:absolute;left:0;right:0;bottom:0;background:var(--neg);color:#fff;
   font-size:10.5px;font-weight:600;text-align:center;padding:3px 4px;letter-spacing:.01em}
 @media (max-width: 720px) {
