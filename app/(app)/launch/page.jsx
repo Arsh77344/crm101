@@ -25,11 +25,13 @@ const STAGE = {
 
 const IMAGERY = [
   ['Clean', 'Clean cut-outs', 'Garment on white, background removed, even lighting.'],
-  ['Mannequin', 'AI mannequin', 'Draped on an invisible mannequin. No person.'],
+  ['Mannequin', 'AI mannequin', 'Draped on a plain dress form that holds its shape. No person.'],
   ['Model', 'AI model', 'Worn by a generated model. Slower and dearer.'],
+  ['Detail', 'Close-up of the cloth', 'A macro of the border or pallu. Always included.'],
   ['Editorial', 'Editorial shoot', 'Built from a look in your library. Needs a look chosen.'],
 ];
-const NO_COUNTS = { Clean: 0, Mannequin: 0, Model: 0, Editorial: 0 };
+// A close-up proves the cloth, so a run never goes out without one.
+const NO_COUNTS = { Clean: 0, Mannequin: 0, Model: 0, Detail: 1, Editorial: 0 };
 
 export default function Launch() {
   const [err, setErr] = useState('');
@@ -45,7 +47,10 @@ export default function Launch() {
     fabric: '', colour: '', weave_or_motif: '', stock_qty: 1, moq: 1,
     cost_price: '', retail_price: '', wholesale_price: '',
   });
-  const [imagery, setImagery] = useState({ counts: { ...NO_COUNTS }, provider: 'openai', look_id: '', tweak: '' });
+  const [imagery, setImagery] = useState({
+    counts: { ...NO_COUNTS }, provider: 'openai', look_id: '', tweak: '',
+    set_id: '', cutout_on_white: true, check: true,
+  });
   const [words, setWords] = useState({ description: '', tags: '', brief: '', highlights: '' });
   const [keys, setKeys] = useState(null);
   const [thinking, setThinking] = useState('');
@@ -161,13 +166,24 @@ export default function Launch() {
   async function runImages() {
     const wanted = IMAGERY.map(([k]) => k).filter((k) => (imagery.counts[k] || 0) > 0);
     if (!wanted.length) return;
+    // The close-up is the frame that proves the cloth, so a run always has one.
+    const runCounts = { ...imagery.counts };
+    if (!wanted.includes('Detail')) { wanted.push('Detail'); runCounts.Detail = 1; }
+    // One set for the whole run. Picked here, not per style, so the frames look
+    // like one shoot even though each style is its own call.
+    const sets = (keys?.sets || []).map((x) => x.id);
+    const setId = imagery.set_id
+      || (sets.length ? sets[Math.floor(Math.random() * sets.length)] : '');
+    if (!imagery.set_id && setId) setImagery((im) => ({ ...im, set_id: setId }));
     setThinking('images'); setErr('');
     const trouble = [];
     for (const mode of wanted) {
       try {
         const out = await assist({
-          action: 'images', provider: 'gemini', mode, count: imagery.counts[mode],
+          action: 'images', provider: 'gemini', mode, count: runCounts[mode],
           look_id: mode === 'Editorial' ? imagery.look_id : null,
+          set_id: mode === 'Editorial' ? null : setId,
+          cutout_on_white: imagery.cutout_on_white, check: imagery.check,
           tweak: imagery.tweak, piece,
           images: shots.map((s) => s.url), parts: shots.map((s) => s.part || 'Unlabelled'),
         });
@@ -295,7 +311,8 @@ export default function Launch() {
       });
       setDone(product);
       setShots([]); setMade([]); setResearch(null); setStep(0);
-      setImagery((im) => ({ ...im, tweak: '', look_id: '', counts: { ...NO_COUNTS } }));
+      setImagery((im) => ({ ...im, tweak: '', look_id: '', set_id: '',
+        counts: { ...NO_COUNTS } }));
       setPiece({ public_product_name: '', internal_sku: '', category: 'Banarasi Saree', fabric: '', colour: '',
         weave_or_motif: '', stock_qty: 1, moq: 1, cost_price: '', retail_price: '', wholesale_price: '' });
       setWords({ description: '', tags: '', brief: '', highlights: '' });
@@ -491,12 +508,50 @@ export default function Launch() {
                     </div>))}
                 </div>
 
-                <div className="row small" style={{ marginBottom: 12 }}>
+                <div className="row small wrap" style={{ marginBottom: 12, gap: 6 }}>
                   <strong>{wantedTotal} image{wantedTotal === 1 ? '' : 's'}</strong>
-                  <span className="muted" style={{ marginLeft: 6 }}>
+                  <span className="muted">
                     in this run{wantedTotal === 0 ? ' — set a number above' : '. Each one costs.'}
                   </span>
+                  {wantedTotal > 0 && (imagery.counts.Detail || 0) === 0 && (
+                    <span className="note warn small" style={{ padding: '2px 8px' }}>
+                      No close-up. One will be added anyway — it is what proves the cloth.
+                    </span>)}
                 </div>
+
+                <div className="form-grid">
+                  <div className="field"><label>The set they all share</label>
+                    <select value={imagery.set_id}
+                      onChange={(e) => setImagery({ ...imagery, set_id: e.target.value })}>
+                      <option value="">Pick one for me</option>
+                      {(keys?.sets || []).map((x) => (
+                        <option key={x.id} value={x.id}>{x.name}</option>))}
+                    </select>
+                    <span className="hint">
+                      Every frame in the run but the editorial ones shares this room and this light.
+                      The camera and the placement move; the background does not. Say what to change
+                      about it in the box below.
+                    </span></div>
+                  <div className="field"><label>Cut-outs</label>
+                    <select value={imagery.cutout_on_white ? 'white' : 'set'}
+                      onChange={(e) => setImagery({ ...imagery,
+                        cutout_on_white: e.target.value === 'white' })}>
+                      <option value="white">On pure white, for listings</option>
+                      <option value="set">On the shared set, like the rest</option>
+                    </select>
+                    <span className="hint">
+                      Marketplaces usually want a white background. Switch it if you would rather
+                      the whole set match.
+                    </span></div>
+                </div>
+
+                <label className="row small" style={{ gap: 7, marginBottom: 12, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={imagery.check} style={{ width: 'auto' }}
+                    onChange={(e) => setImagery({ ...imagery, check: e.target.checked })} />
+                  <span>Check every image against your photos before showing it to me
+                    <span className="faint"> — one extra read per image; flags a colour, border or
+                    motif that drifted</span></span>
+                </label>
 
                 <div className="field" style={{ maxWidth: 340 }}>
                   <label>Which model writes the words</label>
@@ -591,8 +646,25 @@ export default function Launch() {
                                 onClick={() => setMade((xs) => xs.map((x) =>
                                   x.path === m.path ? { ...x, use: !x.use } : x))}
                                 style={{ right: 'auto', left: 4 }}>{m.use ? '✓' : '+'}</button>
+                              {m.check && !m.check.match && (
+                                <span className="shot-flag" title={m.check.differences.join(' · ')}>
+                                  Does not match
+                                </span>)}
                             </div>))}
                         </div>
+
+                        {made.some((m) => m.check && !m.check.match) && (
+                          <div className="note warn small" style={{ marginTop: 10 }}>
+                            <strong>Some of these do not match your photographs.</strong> They were
+                            read back against the piece and the garment came out wrong:
+                            <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                              {made.filter((m) => m.check && !m.check.match).map((m) => (
+                                <li key={m.path}>
+                                  {m.mode}: {m.check.differences.join('; ') || 'the garment differs'}
+                                </li>))}
+                            </ul>
+                            Drop them and generate again rather than selling from them.
+                          </div>)}
                         <div className="note plain small" style={{ marginTop: 10 }}>
                           These are renderings made from your photographs, not photographs of the piece.
                           Check each one against the real garment before you keep it — the border, the

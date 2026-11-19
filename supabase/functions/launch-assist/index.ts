@@ -21,11 +21,18 @@ const MODELS: Record<string, string> = {
   gemini: Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash",
   anthropic: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5",
   groq: Deno.env.get("GROQ_MODEL") || "qwen/qwen3.8-27b",
-  nvidia: Deno.env.get("NVIDIA_MODEL") || "meta/llama-3.1-70b-instruct",
+  // Checked against the key's own catalogue: this one answers in under a second
+  // with no reasoning tokens. The nemotron models work too but spend 1500+
+  // tokens thinking before they answer, and mistral-large never finishes.
+  nvidia: Deno.env.get("NVIDIA_MODEL") || "minimaxai/minimax-m3.1-flash",
 };
 const GROQ_SEARCH = Deno.env.get("GROQ_SEARCH_MODEL") || "groq/compound";
 const GROQ_MAX = Math.max(256, Number(Deno.env.get("GROQ_MAX_TOKENS") || 900));
 const IMAGE_MODEL = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-nano-banana-2.1";
+// The check reads two photographs closely and decides whether a customer would
+// feel misled. That is worth a stronger model than the writing steps use.
+const CHECK_MODEL = Deno.env.get("GEMINI_CHECK_MODEL") || Deno.env.get("GEMINI_MODEL")
+  || "gemini-3.8-flash";
 const LABEL: Record<string, string> = {
   openai: "ChatGPT", gemini: "Gemini", anthropic: "Claude", groq: "Groq", nvidia: "NVIDIA",
 };
@@ -178,21 +185,69 @@ Return only JSON:
 "avoid" is what would make a recreation look wrong or cheap.
 "name" is a short memorable label for this look, under five words.`;
 
-const FIDELITY = `The photographs show one real garment that a customer will actually be sent.
-Reproduce that exact garment: the same colour, the same weave, the same border, the same motifs
-in the same places. Do not restyle it, do not redesign the pattern, do not add or remove embroidery,
-borders or pallu detail, and do not change the colour or its saturation. If part of the garment is
-not visible in the photographs, leave it plain rather than inventing it.
+const FIDELITY = `The photographs show one real garment that a customer will actually be sent, and
+they will hold this image against the parcel. Treat the garment as a thing to be copied, not designed.
+
+Copy exactly, from the photographs:
+- the colour and its saturation, including how it shifts between the body and the border
+- the weave, the thread, the sheen and the texture at the scale the photographs show
+- the border: its width relative to the garment, its pattern, and where it runs
+- every motif: its shape, its size, its spacing and where it sits
+- the pallu: its pattern and how it differs from the body
+- anything that comes with it, such as a blouse piece, as photographed
+
+Do not redraw a motif "in the same style", do not regularise spacing, do not tidy the pattern, do not
+enrich or simplify it, do not add or remove zari, embroidery or border detail, and do not shift the
+colour warmer, cooler or more saturated. Where a part of the garment is not in any photograph, leave
+it plain rather than inventing it. An invented detail makes this image useless, so when in doubt
+reproduce what is photographed and nothing more.
 No text, no watermark, no logo, no brand name anywhere in the image.`;
+
+// One run is one shoot. The owner's non-editorial shots share a set, so the
+// clean, mannequin, model and detail frames sit together on a page instead of
+// looking like four shoots of the same piece. Similar, not identical: the
+// camera and the placement move, the room does not.
+const SETS: Record<string, string> = {
+  stone: "a warm off-white plaster wall with a pale sand-coloured floor, daylight from one side",
+  linen: "a smooth pale oat-coloured linen backdrop, even diffused light, no visible seam",
+  grey: "a seamless light grey studio backdrop with a soft gradient, even studio light",
+  warm: "a soft ivory backdrop with a gentle warm cast, light falling from the upper left",
+};
+const SET_NAME: Record<string, string> = {
+  stone: "Warm stone", linen: "Oat linen", grey: "Studio grey", warm: "Soft ivory",
+};
+
+function setBlock(setId: unknown, mode: string, cutoutOnWhite: boolean) {
+  const line = SETS[String(setId ?? "")] || "";
+  if (!line) return "";
+  if (mode === "Clean" && cutoutOnWhite) {
+    return `\n\nBackground: a plain pure-white sweep, because this frame is a catalogue cut-out. `
+      + `Keep the light the same quality as the rest of this shoot.`;
+  }
+  return `\n\nThis frame belongs to one shoot with the others being made in this run. `
+    + `The set for all of them is ${line}. Keep that same wall, floor, palette and quality of `
+    + `light. Move the camera, the distance and where the piece sits in the frame so the frames `
+    + `are not copies of each other, but do not change the room, the colour of the background or `
+    + `the direction of the light.`;
+}
 
 const SHOT: Record<string, string> = {
   Clean: `${FIDELITY}\nA clean catalogue cut-out: the garment on a plain pure-white background,
 even diffused studio lighting, no shadow on the backdrop, the whole garment in frame, no person
 and no mannequin visible.`,
-  Mannequin: `${FIDELITY}\nDraped on an invisible mannequin, so it holds a worn shape with no person
-and no visible mannequin. Plain pale neutral background, soft studio lighting, full length in frame.`,
+  Mannequin: `${FIDELITY}\nDraped on a real mannequin that is visibly there: a plain matte
+dress form in a single neutral colour, faceless and without hair, standing on its stand, the kind
+a shop uses. The garment is draped over that body and takes its shape from it — shoulder, waist and
+fall all supported. The fabric must not float, hover or hold a shape with nothing inside it, and
+there must be no empty gap where a body should be. Show the mannequin's stand. Full length in frame,
+soft studio lighting.`,
   Model: `${FIDELITY}\nWorn by a woman standing in a relaxed, natural pose, full length in frame,
 plain neutral studio background, soft daylight. Keep the garment the subject of the photograph.`,
+  Detail: `${FIDELITY}\nA close macro of the cloth itself, filling the frame: the border meeting
+the body, or the pallu, whichever the photographs show best. Close enough that the weave, the thread
+and the texture read clearly, shot square on with the fabric lying in soft folds. No person, no
+mannequin, no props. This frame exists to prove the cloth, so every thread of it must be what the
+photographs show.`,
 };
 
 // Free-text direction from the owner, for this shoot only. It is fenced so it can
@@ -486,6 +541,47 @@ async function oneImage(instruction: string, sources: Inline[]) {
   return { data: inline.data as string, mime: (inline.mime_type ?? inline.mimeType ?? "image/png") as string };
 }
 
+// A generated photograph is only worth having if the garment in it is the
+// garment in the parcel. This reads the two side by side and says where they
+// differ, so a wrong one can be thrown away instead of sold from.
+const CHECK_RULES = `You are checking a photograph a model generated against photographs of the real
+garment, before it is used to sell that garment.
+
+The real garment is in the first photographs. The generated one is the LAST photograph.
+Compare only the garment. The background, the pose, the mannequin, the model and the framing are
+meant to differ — ignore them completely.
+
+Return only JSON:
+{"match": boolean, "confidence": "high" | "medium" | "low", "differences": string[]}
+
+"match" is false if a customer holding the real piece beside this image would feel misled: a
+different colour, a border of a different width or pattern, motifs of a different shape, size or
+spacing, detail that is not on the real piece, or detail on the real piece that is missing.
+List each difference in one short plain sentence, naming the part. An empty list means it matches.
+Judge only what the photographs let you see; say "low" confidence rather than guessing.`;
+
+async function checkOne(sources: Inline[], made: Inline, parts: unknown) {
+  const model = CHECK_MODEL;
+  const text = `These are photographs of one real garment.${partsBlock(parts, sources.length)}
+
+The last photograph is the generated one. Does its garment match the real one?`;
+  const payload: any[] = [{ text }];
+  [...sources, made].forEach((im) =>
+    payload.push({ inline_data: { mime_type: im.mime, data: im.data } }));
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    { method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": KEYS.gemini },
+      body: JSON.stringify({ contents: [{ role: "user", parts: payload }],
+        systemInstruction: { parts: [{ text: CHECK_RULES }] } }) });
+  const b = await res.json();
+  if (!res.ok) throw new Error(b?.error?.message || `Gemini returned ${res.status}.`);
+  const said = (b.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("\n");
+  const out = parseJson(said);
+  return { match: out.match !== false, confidence: out.confidence ?? "low",
+           differences: Array.isArray(out.differences) ? out.differences.slice(0, 4) : [] };
+}
+
 async function store(admin: any, folder: string, label: string, i: number,
                      made: { data: string; mime: string }, extra: Record<string, unknown>) {
   const ext = made.mime.includes("jpeg") ? "jpg" : "png";
@@ -520,7 +616,9 @@ Deno.serve(async (req) => {
       openai: Boolean(KEYS.openai), gemini: Boolean(KEYS.gemini),
       anthropic: Boolean(KEYS.anthropic), groq: Boolean(KEYS.groq), nvidia: Boolean(KEYS.nvidia),
       models: { ...MODELS, groq_search: GROQ_SEARCH }, groq_max_tokens: GROQ_MAX,
-      image_model: IMAGE_MODEL, images_ready: Boolean(KEYS.gemini),
+      image_model: IMAGE_MODEL, check_model: CHECK_MODEL,
+      sets: Object.keys(SETS).map((id) => ({ id, name: SET_NAME[id], line: SETS[id] })),
+      images_ready: Boolean(KEYS.gemini),
       brand_set: Boolean(settings.brand_name && settings.brand_sells),
     });
   }
@@ -541,6 +639,7 @@ Deno.serve(async (req) => {
     request: { images: (p.images ?? []).length, products: (p.products ?? []).length,
                mode: p.mode ?? null, count: p.count ?? null, look_id: p.look_id ?? null,
                parts: Array.isArray(p.parts) ? p.parts.slice(0, MAX_SOURCES) : null,
+               set_id: p.set_id ?? null, checked: p.check !== false,
                tweak: String(p.tweak ?? "").trim().slice(0, 700) || null,
                with_market: Boolean(p.research?.comparables?.length) },
   }).select("run_id").maybeSingle();
@@ -573,6 +672,8 @@ Deno.serve(async (req) => {
         return json({ error: "Generated imagery needs a Gemini key (GEMINI_API_KEY). ChatGPT, Claude, Groq and NVIDIA do not produce images." }, 400);
       }
       const mode = String(p.mode ?? "Clean");
+      const scene = setBlock(p.set_id, mode, p.cutout_on_white !== false);
+      const wantCheck = p.check !== false;
       const editorial = mode === "Editorial";
       if (!editorial && !SHOT[mode]) return json({ error: `Unknown imagery style "${mode}".` }, 400);
       if (!images.length) return json({ error: "Upload at least one photo of the piece first." }, 400);
@@ -607,8 +708,14 @@ Deno.serve(async (req) => {
             const withPrev = firstShot ? [...sources, firstShot] : sources;
             const img = await oneImage(instruction, withPrev);
             if (!firstShot) firstShot = { mime: img.mime, data: img.data };
+            const verdict = wantCheck
+              ? await checkOne(sources, img, p.parts).catch((e) => ({
+                  match: true, confidence: "unchecked",
+                  differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`] }))
+              : null;
             made.push(await store(admin, folder, "editorial", i, img,
-              { mode, shot_angle: angle, look_id: look.look_id, look_name: look.name }));
+              { mode, shot_angle: angle, look_id: look.look_id, look_name: look.name,
+                set_id: null, check: verdict }));
           } catch (e) {
             failed.push(e instanceof Error ? e.message : String(e));
           }
@@ -621,7 +728,9 @@ Deno.serve(async (req) => {
       } else {
         const results = await Promise.allSettled(
           Array.from({ length: count }, (_, i) =>
-            oneImage(`${SHOT[mode]}${assemble}\n\nCamera: ${angleFor(i, p.angles)}\n\nWhat the piece is:\n`
+            oneImage(`${SHOT[mode]}${assemble}${scene}`
+              + (mode === "Detail" ? "" : `\n\nCamera: ${angleFor(i, p.angles)}`)
+              + `\n\nWhat the piece is:\n`
               + (describe(p.piece ?? {}, "") || "Not described.") + tweakBlock(p.tweak), sources)));
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
@@ -630,8 +739,15 @@ Deno.serve(async (req) => {
             continue;
           }
           try {
+            const verdict = wantCheck
+              ? await checkOne(sources, r.value, p.parts).catch((e) => ({
+                  match: true, confidence: "unchecked",
+                  differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`] }))
+              : null;
             made.push(await store(admin, folder, mode.toLowerCase(), i, r.value,
-              { mode, shot_angle: angleFor(i, p.angles), look_id: null, look_name: null }));
+              { mode, shot_angle: mode === "Detail" ? "Close macro of the cloth"
+                        : angleFor(i, p.angles),
+                look_id: null, look_name: null, set_id: p.set_id ?? null, check: verdict }));
           } catch (e) { failed.push(e instanceof Error ? e.message : String(e)); }
         }
       }

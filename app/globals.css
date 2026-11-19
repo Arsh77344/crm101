@@ -21,14 +21,14 @@
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
 }
 [data-theme="dark"]{
-  --bg:#0e0e11;
-  --panel:#17171b;
-  --sidebar:#101013;
-  --line:#272a30;
-  --line-2:#1f2126;
-  --ink:#ededf0;
-  --ink-2:#a2a2ac;
-  --ink-3:#71717f;
+  --bg:#121317;
+  --panel:#1c1e23;
+  --sidebar:#0b0c0e;
+  --line:#32353d;
+  --line-2:#26282e;
+  --ink:#f2f2f5;
+  --ink-2:#aeaeb9;
+  --ink-3:#83838f;
   --accent:#4f93ff;
   --accent-wash:#13233d;
   --pos:#4ec07e;  --pos-wash:#13291e;
@@ -221,10 +221,16 @@ input,select,textarea,button{font:inherit;color:inherit}
 .legend b{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
 
 /* ============ misc ============ */
-.note{padding:9px 12px;border-radius:var(--r-sm);background:var(--accent-wash);color:var(--accent);
-  font-size:12.5px;border:1px solid transparent}
-.note.warn{background:var(--neg-wash);color:var(--neg)}
-.note.plain{background:var(--line-2);color:var(--ink-2)}
+.note{padding:9px 12px 9px 11px;border-radius:var(--r-sm);background:var(--accent-wash);
+  color:var(--accent);font-size:12.5px;border:1px solid transparent;
+  border-left:3px solid var(--accent)}
+.note.warn{background:var(--neg-wash);color:var(--neg);border-left-color:var(--neg)}
+.note.good{background:var(--pos-wash);color:var(--pos);border-left-color:var(--pos)}
+.note.plain{background:var(--line-2);color:var(--ink-2);border-left-color:var(--ink-3)}
+.note strong{font-weight:600}
+.note ul{margin:5px 0 0;padding-left:17px}
+.note li{margin-bottom:2px}
+.note li:last-child{margin-bottom:0}
 .avatar{width:26px;height:26px;border-radius:6px;background:var(--line-2);color:var(--ink-2);
   display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0}
 .thumb{width:40px;height:52px;border-radius:5px;object-fit:cover;background:var(--line-2);
@@ -304,6 +310,8 @@ input,select,textarea,button{font:inherit;color:inherit}
   flex: 0 0 auto; }
 .lb-x:hover, .lb-nav:hover { background: rgba(255,255,255,.26); }
 .thumb.clickable, .shot.clickable { cursor: zoom-in; }
+.shot-flag{position:absolute;left:0;right:0;bottom:0;background:var(--neg);color:#fff;
+  font-size:10.5px;font-weight:600;text-align:center;padding:3px 4px;letter-spacing:.01em}
 @media (max-width: 720px) {
   .lb { padding: 12px; gap: 4px; }
   .lb-nav { width: 34px; height: 34px; font-size: 20px; }
