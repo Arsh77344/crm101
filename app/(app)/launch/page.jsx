@@ -44,7 +44,7 @@ export default function Launch() {
     fabric: '', colour: '', weave_or_motif: '', stock_qty: 1, moq: 1,
     cost_price: '', retail_price: '', wholesale_price: '',
   });
-  const [imagery, setImagery] = useState({ mode: 'Clean', count: 3, provider: 'openai', look_id: '' });
+  const [imagery, setImagery] = useState({ mode: 'Clean', count: 3, provider: 'openai', look_id: '', tweak: '' });
   const [words, setWords] = useState({ description: '', tags: '', brief: '', highlights: '' });
   const [keys, setKeys] = useState(null);
   const [thinking, setThinking] = useState('');
@@ -158,6 +158,7 @@ export default function Launch() {
       const out = await assist({
         action: 'images', provider: 'gemini', mode: imagery.mode, count: imagery.count,
         look_id: imagery.mode === 'Editorial' ? imagery.look_id : null,
+        tweak: imagery.tweak,
         piece, images: shots.map((s) => s.url),
       });
       setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
@@ -275,6 +276,7 @@ export default function Launch() {
       });
       setDone(product);
       setShots([]); setMade([]); setResearch(null); setStep(0);
+      setImagery((im) => ({ ...im, tweak: '', look_id: '' }));
       setPiece({ public_product_name: '', internal_sku: '', category: 'Banarasi Saree', fabric: '', colour: '',
         weave_or_motif: '', stock_qty: 1, moq: 1, cost_price: '', retail_price: '', wholesale_price: '' });
       setWords({ description: '', tags: '', brief: '', highlights: '' });
@@ -466,6 +468,20 @@ export default function Launch() {
                             together — faces still drift between takes, so expect to regenerate.
                           </span>
                         </>)}
+                  </div>)}
+
+                {imagery.mode !== 'None' && (
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label>Anything to change about this shot <span className="faint">(optional)</span></label>
+                    <textarea value={imagery.tweak} style={{ minHeight: 64 }}
+                      placeholder="Warmer light, late afternoon. Plain stone wall behind her instead. Marigolds rather than roses. Make it more dramatic."
+                      onChange={(e) => setImagery({ ...imagery, tweak: e.target.value })} />
+                    <span className="hint">
+                      A line or two in your own words, applied to every frame in this run. It can
+                      change the setting, background, props, styling, mood, light and camera — but
+                      not the garment: colour, weave, border and motifs stay matched to your photos,
+                      and anything asking otherwise is ignored.
+                    </span>
                   </div>)}
 
                 {imagery.mode !== 'None' && (
