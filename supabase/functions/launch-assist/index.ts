@@ -223,12 +223,26 @@ const SET_NAME: Record<string, string> = {
   stone: "Warm stone", linen: "Oat linen", grey: "Studio grey", warm: "Soft ivory",
 };
 
+const PROPS: string[] = [
+  "folded once over the back of a simple wooden chair, the fall of it reaching the floor",
+  "laid along a low stone ledge, one end spilling over the edge",
+  "draped over a cane stool, the pallu hanging down one side",
+  "spread across a linen-covered table, gathered into soft folds at one corner",
+  "folded in a neat stack on a plain bench, the border showing along the top edge",
+  "hung from a plain wooden rail, falling straight with one corner turned back",
+];
+
+function propFor(i: number) {
+  return PROPS[i % PROPS.length];
+}
+
 function setBlock(setId: unknown, mode: string, cutoutOnWhite: boolean) {
   const line = SETS[String(setId ?? "")] || "";
   if (!line) return "";
   if (mode === "Clean" && cutoutOnWhite) {
-    return `\n\nBackground: a plain pure-white sweep, because this frame is a catalogue cut-out. `
-      + `Keep the light the same quality as the rest of this shoot.`;
+    return `\n\nBackground: a plain pure-white sweep, because this frame is a catalogue cut-out `
+      + `for a marketplace listing. The garment lies flat and square to camera, evenly lit, with `
+      + `only the faintest contact shadow. No props, no furniture, nothing else in the frame.`;
   }
   return `\n\nThis frame belongs to one shoot with the others being made in this run. `
     + `The set for all of them is ${line}. Keep that same wall, floor, palette and quality of `
@@ -238,9 +252,10 @@ function setBlock(setId: unknown, mode: string, cutoutOnWhite: boolean) {
 }
 
 const SHOT: Record<string, string> = {
-  Clean: `${FIDELITY}\nA clean catalogue cut-out: the garment on a plain pure-white background,
-even diffused studio lighting, no shadow on the backdrop, the whole garment in frame, no person
-and no mannequin visible.`,
+  Clean: `${FIDELITY}\nA styled studio still of the piece itself, no person and no mannequin:
+the whole garment in frame, arranged so its border and pallu are readable. Shot like a catalogue
+photographer would shoot it — one soft key light with a gentle falloff, a soft shadow under the
+cloth so it sits on the surface rather than floating, no harsh highlight on the silk.`,
   Mannequin: `${FIDELITY}\nDraped on a real mannequin that is visibly there: a plain matte
 dress form in a single neutral colour, faceless and without hair, standing on its stand, the kind
 a shop uses. The garment is draped over that body and takes its shape from it — shoulder, waist and
@@ -249,11 +264,12 @@ there must be no empty gap where a body should be. Show the mannequin's stand. F
 soft studio lighting.`,
   Model: `${FIDELITY}\nWorn by a woman standing in a relaxed, natural pose, full length in frame,
 plain neutral studio background, soft daylight. Keep the garment the subject of the photograph.`,
-  Detail: `${FIDELITY}\nA close macro of the cloth itself, filling the frame: the border meeting
-the body, or the pallu, whichever the photographs show best. Close enough that the weave, the thread
-and the texture read clearly, shot square on with the fabric lying in soft folds. No person, no
-mannequin, no props. This frame exists to prove the cloth, so every thread of it must be what the
-photographs show.`,
+  Detail: `${FIDELITY}\nA close macro of the cloth, filling the frame: the border meeting the
+body, or the pallu, whichever the photographs show best. Close enough that the weave, the thread and
+the texture read clearly, with the fabric falling in soft folds over whatever it is resting on and
+a shallow depth of field so the far folds soften. One soft light raking across the weave, so the
+texture and any zari catch it. This frame exists to prove the cloth, so every thread of it must be
+what the photographs show.`,
 };
 
 // Free-text direction from the owner, for this shoot only. It is fenced so it can
@@ -735,7 +751,14 @@ Deno.serve(async (req) => {
         const results = await Promise.allSettled(
           Array.from({ length: count }, (_, i) =>
             oneImage(`${SHOT[mode]}${assemble}${scene}`
-              + (mode === "Detail" ? "" : `\n\nCamera: ${angleFor(i, p.angles)}`)
+              + ((mode === "Clean" && p.cutout_on_white !== false)
+                ? ""
+                : (mode === "Clean" || mode === "Detail")
+                  ? `\n\nHow it sits in the frame: ${propFor(i + (p.prop_from ?? 0))}. `
+                    + `Whatever it rests on is plain and belongs to this set — bare wood, stone, `
+                    + `cane or undyed linen, nothing patterned, nothing that competes with the `
+                    + `cloth and nothing branded.`
+                  : `\n\nCamera: ${angleFor(i, p.angles)}`)
               + `\n\nWhat the piece is:\n`
               + (describe(p.piece ?? {}, "") || "Not described.") + tweakBlock(p.tweak), sources)));
         for (let i = 0; i < results.length; i++) {

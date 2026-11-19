@@ -24,10 +24,10 @@ const STAGE = {
 };
 
 const IMAGERY = [
-  ['Clean', 'Clean cut-outs', 'Garment on white, background removed, even lighting.'],
+  ['Clean', 'Studio still', 'The piece itself, styled on the set. White cut-out optional.'],
   ['Mannequin', 'AI mannequin', 'Draped on a plain dress form that holds its shape. No person.'],
   ['Model', 'AI model', 'Worn by a generated model. Slower and dearer.'],
-  ['Detail', 'Close-up of the cloth', 'A macro of the border or pallu. Always included.'],
+  ['Detail', 'Close-up of the cloth', 'A macro of the border or pallu, on the set. Always included.'],
   ['Editorial', 'Editorial shoot', 'Built from a look in your library. Needs a look chosen.'],
 ];
 // A close-up proves the cloth, so a run never goes out without one.
@@ -49,7 +49,7 @@ export default function Launch() {
   });
   const [imagery, setImagery] = useState({
     counts: { ...NO_COUNTS }, provider: 'openai', look_id: '', tweak: '',
-    set_id: '', cutout_on_white: true, check: true,
+    set_id: '', cutout_on_white: false, check: true,
   });
   const [words, setWords] = useState({ description: '', tags: '', brief: '', highlights: '' });
   const [keys, setKeys] = useState(null);
@@ -177,6 +177,9 @@ export default function Launch() {
     const sets = (keys?.sets || []).map((x) => x.id);
     const setId = imagery.set_id
       || (sets.length ? sets[Math.floor(Math.random() * sets.length)] : '');
+    // Start the prop rotation somewhere new, so the second run of a piece is not
+    // the first one again.
+    const propFrom = Math.floor(Math.random() * 6);
     if (!imagery.set_id && setId) setImagery((im) => ({ ...im, set_id: setId }));
     setThinking('images'); setErr('');
     const trouble = [];
@@ -186,7 +189,7 @@ export default function Launch() {
           action: 'images', provider: 'gemini', mode, count: runCounts[mode],
           look_id: mode === 'Editorial' ? imagery.look_id : null,
           set_id: mode === 'Editorial' ? null : setId,
-          cutout_on_white: imagery.cutout_on_white, check: imagery.check,
+          cutout_on_white: imagery.cutout_on_white, check: imagery.check, prop_from: propFrom,
           tweak: imagery.tweak, piece,
           images: shots.map((s) => s.url), parts: shots.map((s) => s.part || 'Unlabelled'),
         });
@@ -548,16 +551,17 @@ export default function Launch() {
                       The camera and the placement move; the background does not. Say what to change
                       about it in the box below.
                     </span></div>
-                  <div className="field"><label>Cut-outs</label>
+                  <div className="field"><label>The studio stills</label>
                     <select value={imagery.cutout_on_white ? 'white' : 'set'}
                       onChange={(e) => setImagery({ ...imagery,
                         cutout_on_white: e.target.value === 'white' })}>
-                      <option value="white">On pure white, for listings</option>
-                      <option value="set">On the shared set, like the rest</option>
+                      <option value="set">Styled on the set — over a chair, a ledge, a stool</option>
+                      <option value="white">Flat cut-out on pure white, for marketplace listings</option>
                     </select>
                     <span className="hint">
-                      Marketplaces usually want a white background. Switch it if you would rather
-                      the whole set match.
+                      Styled is a photograph: the piece over something plain that belongs to the
+                      set, lit like a catalogue shoot, a different arrangement each frame. Pick the
+                      cut-out when a marketplace demands a white background.
                     </span></div>
                 </div>
 
