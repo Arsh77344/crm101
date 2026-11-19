@@ -5,58 +5,8 @@ import Link from 'next/link';
 import { useSession, canManage } from '@/lib/session';
 import { sb } from '@/lib/db';
 import { initials } from '@/components/ui';
-import Search from '@/components/Search';
 import { LightboxProvider } from '@/components/Lightbox';
-
-const NAV = [
-  ['Sell', [
-    ['/', 'Dashboard', '◉'],
-    ['/products', 'Products', '▣'],
-    ['/collections', 'Collections', '❏'],
-    ['/launch', 'Product launch', '✦'],
-    ['/orders', 'Orders', '⊞'],
-    ['/showrooms', 'Showrooms', '◫'],
-  ]],
-  ['Fulfil', [
-    ['/shipments', 'Shipments', '➤'],
-    ['/payments', 'Payments', '₹'],
-    ['/returns', 'Returns', '↩'],
-  ]],
-  ['Customers', [
-    ['/contacts', 'Contacts', '◐'],
-    ['/companies', 'Companies', '⌂'],
-    ['/pipeline', 'Pipeline', '⇄'],
-    ['/journey', 'Customer journey', '◎'],
-    ['/activities', 'Activities', '✎'],
-  ]],
-  ['Marketing', [
-    ['/campaigns', 'Campaigns', '◈'],
-    ['/generate', 'Build a campaign', '✧'],
-    ['/looks', 'Look library', '◇'],
-    ['/calendar', 'Content calendar', '▦'],
-    ['/performance', 'Performance', '◢'],
-    ['/links', 'Tracked links', '⇗'],
-    ['/templates', 'Message templates', '▤'],
-    ['/broadcasts', 'Broadcasts', '📣'],
-    ['/analytics', 'Website analytics', '◴'],
-    ['/consent', 'Consent centre', '⚖'],
-  ]],
-  ['Make & spend', [
-    ['/brands', 'Brand partners', '◧'],
-    ['/payables', 'What you owe', '₹'],
-    ['/suppliers', 'Service vendors', '⚒'],
-    ['/expenses', 'Expenses', '⊟'],
-    ['/finance', 'Profit & loss', '◪'],
-  ]],
-  ['Run', [
-    ['/agents', 'Department agents', '✦'],
-    ['/tasks', 'Tasks', '✓'],
-    ['/automations', 'Automations', '⟳'],
-    ['/integrations', 'Integrations', '⚯'],
-    ['/team', 'Team & roles', '☰'],
-    ['/settings', 'Settings', '⚙'],
-  ]],
-];
+import { HOME, NAV, sectionOf } from '@/lib/nav';
 
 export default function WorkspaceLayout({ children }) {
   const { loading, user, profile } = useSession();
@@ -64,9 +14,16 @@ export default function WorkspaceLayout({ children }) {
   const path = usePathname();
   const [theme, setTheme] = useState('light');
   const [navOpen, setNavOpen] = useState(false);
+  // Which sections stand open. Remembered the way the theme already is, so the
+  // rail looks the same on the next visit.
+  const [open, setOpen] = useState([]);
 
   useEffect(() => {
     try { setTheme(localStorage.getItem('cos-theme') || 'light'); } catch { /* ignore */ }
+    try {
+      const kept = JSON.parse(localStorage.getItem('cos-nav') || 'null');
+      if (Array.isArray(kept)) setOpen(kept.filter((x) => NAV.some(([g]) => g === x)));
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -80,6 +37,14 @@ export default function WorkspaceLayout({ children }) {
     try { localStorage.setItem('cos-theme', next); } catch { /* ignore */ }
   }
 
+  function toggleSection(group) {
+    setOpen((cur) => {
+      const next = cur.includes(group) ? cur.filter((g) => g !== group) : [...cur, group];
+      try { localStorage.setItem('cos-nav', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
   async function signOut() {
     await sb().auth.signOut();
     router.replace('/login');
@@ -91,30 +56,49 @@ export default function WorkspaceLayout({ children }) {
   const role = profile?.role || 'sales';
   const clean = (p) => (p.length > 1 ? p.replace(/\/$/, '') : p);
   const here = clean(path || '/');
+  const current = sectionOf(here);
 
   return (
     <LightboxProvider>
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">C</div>
-          <div><span className="brand-name">Commerce OS</span><span className="brand-sub">Business workspace</span></div>
-        </div>
+        <Link href="/" className="brand" onClick={() => setNavOpen(false)}>
+          <div className="brand-mark">Z</div>
+          <div><span className="brand-name">Zarivia</span><span className="brand-sub">Business workspace</span></div>
+        </Link>
         <button className="menu-btn" onClick={() => setNavOpen((v) => !v)} aria-label="Menu">☰ Menu</button>
         <nav className={`nav ${navOpen ? 'show' : ''}`}>
-          {NAV.map(([group, items]) => (
-            <div key={group}>
-              <div className="nav-group">{group}</div>
-              {items.map(([href, label, ico]) => {
-                const on = href === '/' ? here === '/' : here.startsWith(href);
-                return (
-                  <Link key={href} href={href} className={on ? 'on' : ''} onClick={() => setNavOpen(false)}>
-                    <span className="ico">{ico}</span>{label}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+          <Link href={HOME[0]} className={`nav-home ${here === '/' ? 'on' : ''}`}
+            onClick={() => setNavOpen(false)}>
+            <span className="ico">{HOME[2]}</span>{HOME[1]}
+          </Link>
+
+          {NAV.map(([group, items]) => {
+            // The section holding the page you are on is open whether or not you
+            // opened it, so you can always see where you are.
+            const live = group === current;
+            const shown = live || open.includes(group);
+            return (
+              <div className="nav-sec" key={group}>
+                <button type="button" className={`nav-sec-head ${shown ? 'open' : ''}`}
+                  aria-expanded={shown} onClick={() => toggleSection(group)}>
+                  <span className="caret" aria-hidden="true">{shown ? '▾' : '▸'}</span>
+                  <span className="nav-sec-name">{group}</span>
+                  {!shown && <span className="nav-sec-n">{items.length}</span>}
+                  {!shown && live && <span className="nav-dot" aria-hidden="true" />}
+                </button>
+                {shown && (
+                  <div className="nav-sec-body">
+                    {items.map(([href, label, ico]) => (
+                      <Link key={href} href={href} className={here.startsWith(href) ? 'on' : ''}
+                        onClick={() => setNavOpen(false)}>
+                        <span className="ico">{ico}</span>{label}
+                      </Link>
+                    ))}
+                  </div>)}
+              </div>
+            );
+          })}
         </nav>
         <div className="side-foot">
           <div className="row" style={{ gap: 8 }}>
@@ -128,14 +112,15 @@ export default function WorkspaceLayout({ children }) {
               </div>
             </div>
           </div>
-          <button className="theme-btn" onClick={toggleTheme}>
-            {theme === 'dark' ? '☀ Light mode' : '☾ Dark mode'}
-          </button>
-          <div><button className="theme-btn" onClick={signOut}>Sign out</button></div>
+          <div className="foot-acts">
+            <button className="theme-btn" onClick={toggleTheme}>
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
+            <button className="theme-btn" onClick={signOut}>Sign out</button>
+          </div>
         </div>
       </aside>
       <main className="main">
-        <div className="qbar"><Search /></div>
         {children}
       </main>
     </div>

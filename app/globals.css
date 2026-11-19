@@ -56,28 +56,47 @@ input,select,textarea,button{font:inherit;color:inherit}
 .sidebar{background:var(--sidebar);padding:14px 10px;position:sticky;top:0;height:100vh;
   overflow-y:auto;display:flex;flex-direction:column;border-right:1px solid var(--line)}
 [data-theme="dark"] .sidebar{border-right-color:#1d1f24}
-.brand{display:flex;align-items:center;gap:9px;padding:6px 8px 14px}
+.brand{display:flex;align-items:center;gap:9px;padding:6px 8px 12px}
+.brand:hover .brand-name{color:#fff}
 .brand-mark{width:25px;height:25px;border-radius:6px;background:var(--accent);display:grid;place-items:center;
   color:#fff;font-size:12px;font-weight:700;letter-spacing:-.02em}
 .brand-name{color:#f4f4f5;font-size:13.5px;font-weight:600;letter-spacing:-.01em;display:block}
 .brand-sub{display:block;font-size:10.5px;color:#7c7c88;margin-top:-1px}
 .nav{flex:1}
-.nav-group{margin:12px 0 3px;padding:0 8px;font-size:10px;font-weight:600;letter-spacing:.07em;
-  text-transform:uppercase;color:#60606d}
 .nav a{display:flex;align-items:center;gap:8px;padding:5.5px 8px;border-radius:6px;
   color:#b4b4bf;font-size:13px;line-height:1.3}
 .nav a:hover{background:#ffffff0d;color:#f4f4f5}
 .nav a.on{background:#ffffff14;color:#fff;font-weight:500}
 .nav .ico{width:14px;text-align:center;font-size:11px;opacity:.75}
+.nav-home{margin-bottom:4px}
+
+/* A section: a header you click, and the pages it holds. */
+.nav-sec{border-top:1px solid #ffffff0d}
+.nav-sec:first-of-type{border-top:0}
+.nav-sec-head{display:flex;align-items:center;gap:7px;width:100%;padding:7px 8px;
+  background:none;border:0;border-radius:6px;cursor:pointer;color:#9a9aa6;
+  font-size:11.5px;font-weight:600;letter-spacing:.02em;text-align:left}
+.nav-sec-head:hover{background:#ffffff0d;color:#f4f4f5}
+.nav-sec-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.nav-sec-head .caret{width:11px;font-size:9px;opacity:.7;flex-shrink:0}
+.nav-sec-head.open{color:#d4d4d8}
+.nav-sec-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-sec-n{font-size:10.5px;font-weight:500;color:#60606d;flex-shrink:0}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.nav-sec-body{padding:1px 0 5px 11px}
 .side-foot{padding:10px 8px 2px;border-top:1px solid #ffffff12;margin-top:10px}
 .side-foot .who{color:#e4e4e7;font-size:12.5px;line-height:1.25}
 .side-foot .role{font-size:11px;color:#71717f;text-transform:capitalize}
+.foot-acts{display:flex;gap:14px;margin-top:6px}
 .theme-btn{background:none;border:0;color:#71717f;cursor:pointer;font-size:11.5px;padding:3px 0;display:block}
 .theme-btn:hover{color:#e4e4e7}
 
 .main{min-width:0;display:flex;flex-direction:column}
 .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
-  padding:20px 26px 0}
+  padding:15px 26px;background:var(--bg);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:40}
+.topbar-head{min-width:0}
+.topbar-acts{flex-shrink:0;justify-content:flex-end}
 .page-title{font-size:20px;font-weight:600;letter-spacing:-.018em}
 .page-sub{color:var(--ink-2);font-size:13px;margin-top:2px}
 .content{padding:18px 26px 56px}
@@ -212,6 +231,9 @@ input,select,textarea,button{font:inherit;color:inherit}
   display:grid;place-items:center;color:var(--ink-3);font-size:10px;overflow:hidden}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .loading{padding:36px;text-align:center;color:var(--ink-2);font-size:13px}
+.hit{display:block;width:100%;text-align:left;border:0;background:transparent;
+  padding:9px 15px;cursor:pointer;border-bottom:1px solid var(--line-2)}
+.hit:hover{background:var(--line-2)}
 .panel{position:sticky;top:16px}
 .steps{display:flex;gap:4px;margin-bottom:18px;flex-wrap:wrap}
 .step{flex:1;min-width:120px;padding:9px 11px;border-radius:var(--r-sm);border:1px solid var(--line);
@@ -247,7 +269,6 @@ input,select,textarea,button{font:inherit;color:inherit}
 }
 
 /* ---- quick search bar + mobile nav ---- */
-.qbar{display:flex;justify-content:flex-end;padding:12px 26px 0}
 .menu-btn{display:none;width:100%;margin-bottom:8px;background:#ffffff12;border:0;color:#d4d4d8;
   padding:7px 9px;border-radius:6px;font-size:13px;cursor:pointer;text-align:left}
 @media (max-width:900px){
@@ -255,7 +276,6 @@ input,select,textarea,button{font:inherit;color:inherit}
   .menu-btn{display:block}
   .nav{display:none}
   .nav.show{display:block}
-  .qbar{padding:10px 14px 0}
   .board{grid-template-columns:repeat(2,minmax(160px,1fr))}
   .cal .day{min-height:76px}
   .panel{position:static}

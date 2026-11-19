@@ -1,4 +1,5 @@
 'use client';
+import Search from './Search';
 export function money(n, currency = 'INR') {
   if (n === null || n === undefined || n === '') return '—';
   const v = Number(n);
@@ -74,8 +75,11 @@ export function Page({ title, sub, actions, children }) {
   return (
     <>
       <div className="topbar">
-        <div><h1 className="page-title">{title}</h1>{sub && <div className="page-sub">{sub}</div>}</div>
-        <div className="row">{actions}</div>
+        <div className="topbar-head">
+          <h1 className="page-title">{title}</h1>
+          {sub && <div className="page-sub">{sub}</div>}
+        </div>
+        <div className="row wrap topbar-acts">{actions}<Search /></div>
       </div>
       <div className="content">{children}</div>
     </>

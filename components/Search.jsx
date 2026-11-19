@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { sb } from '@/lib/db';
+import { PAGES } from '@/lib/nav';
 
 const SOURCES = [
   { table: 'products', pk: 'product_id', label: 'public_product_name', sub: 'internal_sku',
@@ -37,6 +38,12 @@ export default function Search() {
 
   useEffect(() => { if (open) setTimeout(() => box.current?.focus(), 30); }, [open]);
 
+  const q = term.trim();
+  const pageHits = q.length < 1 ? [] : PAGES
+    .filter((p) => p.label.toLowerCase().includes(q.toLowerCase())
+      || p.group.toLowerCase().startsWith(q.toLowerCase()))
+    .slice(0, 6);
+
   useEffect(() => {
     const q = term.trim();
     if (q.length < 2) { setHits([]); return; }
@@ -59,6 +66,12 @@ export default function Search() {
 
   function goTo(h) { setOpen(false); setTerm(''); router.push(h.href); }
 
+  // Enter with nothing chosen goes to the first page that matched, which is the
+  // common case: open, type three letters of a page name, Enter.
+  function onKeyDown(e) {
+    if (e.key === 'Enter' && pageHits.length) { e.preventDefault(); goTo(pageHits[0]); }
+  }
+
   if (!open) {
     return (
       <button className="btn btn-sm" onClick={() => setOpen(true)} title="Search (Ctrl K)">
@@ -74,18 +87,24 @@ export default function Search() {
       <div className="card" onClick={(e) => e.stopPropagation()}
         style={{ width: 'min(540px,92vw)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden' }}>
         <input ref={box} value={term} onChange={(e) => setTerm(e.target.value)}
-          placeholder="Search products, people, orders, campaigns…"
+          onKeyDown={onKeyDown}
+          placeholder="Go to a page, or search products, people, orders…"
           style={{ width: '100%', border: 0, borderBottom: '1px solid var(--line)', padding: '13px 15px',
             fontSize: 14.5, outline: 'none', background: 'var(--panel)', color: 'var(--ink)' }} />
         <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-          {term.trim().length < 2 && <div className="small faint" style={{ padding: 15 }}>Type at least two letters.</div>}
-          {term.trim().length >= 2 && !busy && hits.length === 0 &&
+          {pageHits.map((p) => (
+            <button key={p.href} onClick={() => goTo(p)} className="hit">
+              <span className="badge b-accent" style={{ marginRight: 8 }}>Page</span>
+              <span style={{ fontWeight: 500 }}>{p.label}</span>
+              <span className="small faint"> · {p.group}</span>
+            </button>))}
+          {q.length < 1 && <div className="small faint" style={{ padding: 15 }}>
+            Type a page name to jump to it, or two letters to search your records.</div>}
+          {q.length >= 2 && !busy && hits.length === 0 && pageHits.length === 0 &&
             <div className="small faint" style={{ padding: 15 }}>Nothing matches “{term}”.</div>}
           {busy && <div className="small faint" style={{ padding: 15 }}>Searching…</div>}
           {hits.map((h) => (
-            <button key={`${h.kind}-${h.id}`} onClick={() => goTo(h)}
-              style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, background: 'transparent',
-                padding: '9px 15px', cursor: 'pointer', borderBottom: '1px solid var(--line-2)' }}>
+            <button key={`${h.kind}-${h.id}`} onClick={() => goTo(h)} className="hit">
               <span className="badge" style={{ marginRight: 8 }}>{h.kind}</span>
               <span style={{ fontWeight: 500 }}>{h.label}</span>
               {h.sub && <span className="small faint"> · {h.sub}</span>}
