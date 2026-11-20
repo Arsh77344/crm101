@@ -5,6 +5,7 @@ import { uploadImage, deleteImage } from '@/lib/upload';
 import { assist, PROVIDERS, NO_KEYS, providerOption, firstWithKey, hasKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when } from '@/components/ui';
 import { useLightbox } from '@/components/Lightbox';
+import Dictate from '@/components/Dictate';
 
 // What the reading produces. Editable by hand: this text, not the picture, is what
 // every future shoot is built from, so a wrong line here spreads.
@@ -26,6 +27,7 @@ export default function Looks() {
   const [err, setErr] = useState('');
   const [provider, setProvider] = useState('gemini');
   const enlarge = useLightbox();
+  const noteRef = useRef(null);
 
   const q = useQuery(async (c) => {
     const [looks, usage, keys] = await Promise.all([
@@ -238,9 +240,15 @@ export default function Looks() {
                       <input defaultValue={current.tags || ''} placeholder="ghats, golden hour, seated"
                         onBlur={(e) => save(current, { tags: e.target.value })} /></div>
                     <div className="field"><label>Your own direction</label>
-                      <textarea defaultValue={current.notes || ''}
+                      <textarea ref={noteRef} defaultValue={current.notes || ''} key={current.look_id}
                         placeholder="Anything the reading missed, or what you want done differently."
-                        onBlur={(e) => save(current, { notes: e.target.value })} /></div>
+                        onBlur={(e) => save(current, { notes: e.target.value })} />
+                      <Dictate onText={(f) => {
+                        const node = noteRef.current;
+                        if (!node) return;
+                        node.value = f(node.value);
+                        save(current, { notes: node.value });
+                      }} /></div>
                     <div className="row" style={{ marginTop: 6 }}>
                       <button className="btn btn-sm" disabled={busy === current.look_id || !hasKey(keys, provider)}
                         onClick={() => read(current)}>

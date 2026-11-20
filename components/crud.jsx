@@ -5,6 +5,7 @@ import { useQuery, insertRow, updateRow, removeRow, formValues } from '@/lib/db'
 import Sheet from './Sheet';
 import { useSession, canManage } from '@/lib/session';
 import { Page, Badge, Empty, Loading, ErrorNote, Stat, money, when } from './ui';
+import { SpokenArea } from './Dictate';
 
 function cell(row, col) {
   const raw = col.key.split('.').reduce((o, k) => (o ? o[k] : undefined), row);
@@ -151,7 +152,8 @@ export default function Crud({ cfg }) {
                   <div className="field" key={f.name}>
                     <label>{f.label}</label>
                     {f.type === 'textarea' ? (
-                      <textarea name={f.name} defaultValue={editing[f.name] ?? ''} placeholder={f.placeholder} />
+                      <SpokenArea name={f.name} defaultValue={editing[f.name] ?? ''}
+                        placeholder={f.placeholder} />
                     ) : f.lookup ? (
                       <select name={f.name} defaultValue={editing[f.name] ?? ''}>
                         <option value="">—</option>

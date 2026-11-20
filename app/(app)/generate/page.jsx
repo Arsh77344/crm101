@@ -6,6 +6,7 @@ import { useQuery, insertRow, sb } from '@/lib/db';
 import { assist, PROVIDERS, NO_KEYS, providerLabel, providerOption,
   providerHint, hasKey, firstWithKey } from '@/lib/assist';
 import { Page, Badge, Loading, ErrorNote, money, when } from '@/components/ui';
+import Dictate from '@/components/Dictate';
 
 const CHANNELS = ['Instagram', 'WhatsApp', 'Email', 'Facebook'];
 const OBJECTIVES = ['Launch', 'Sales', 'Awareness', 'Lead generation', 'Retention'];
@@ -253,7 +254,8 @@ export default function Generate() {
 
               <div className="field"><label>Anything it must know</label>
                 <textarea value={opts.brief} placeholder="The shoot is done. Launch before the wedding season."
-                  onChange={(e) => setOpts({ ...opts, brief: e.target.value })} /></div>
+                  onChange={(e) => setOpts({ ...opts, brief: e.target.value })} />
+                <Dictate onText={(f) => setOpts((o) => ({ ...o, brief: f(o.brief) }))} /></div>
 
               <div className="field"><label>Which model</label>
                 <select value={opts.provider} onChange={(e) => setOpts({ ...opts, provider: e.target.value })}>

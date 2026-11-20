@@ -9,6 +9,7 @@ import { Page, Badge, Empty, Loading, ErrorNote, when, money } from '@/component
 import Sheet from '@/components/Sheet';
 import { PRODUCT_SHEET } from '@/lib/schemas';
 import { useLightbox } from '@/components/Lightbox';
+import Dictate from '@/components/Dictate';
 import { partFromName, partGaps, PART_OPTIONS } from '@/lib/parts';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
@@ -623,6 +624,7 @@ export default function Launch() {
                     <textarea value={imagery.tweak} style={{ minHeight: 64 }}
                       placeholder="Warmer light, late afternoon. Plain stone wall behind her instead. Marigolds rather than roses. Make it more dramatic."
                       onChange={(e) => setImagery({ ...imagery, tweak: e.target.value })} />
+                    <Dictate onText={(f) => setImagery((im) => ({ ...im, tweak: f(im.tweak) }))} />
                     <span className="hint">
                       A line or two in your own words, applied to every frame in this run. It can
                       change the setting, background, props, styling, mood, light and camera — but
@@ -721,6 +723,7 @@ export default function Launch() {
                 <div className="field"><label>Anything the description must say</label>
                   <textarea value={words.brief} placeholder="Forty days on the loom. Azo-free dyes. Blouse piece included."
                     onChange={(e) => setWords({ ...words, brief: e.target.value })} />
+                  <Dictate onText={(f) => setWords((w) => ({ ...w, brief: f(w.brief) }))} />
                   <span className="hint">Facts only. The write-up gets built from these plus the photos.</span></div>
 
                 <div className="row wrap" style={{ marginBottom: 10 }}>

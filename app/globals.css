@@ -313,6 +313,18 @@ input,select,textarea,button{font:inherit;color:inherit}
 
 /* The look library reads as a numbered list: a tile grid cannot carry a name,
    a description and where the look has already been used. */
+/* Speak instead of typing, on the fields that take a brief. */
+.dictate{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:5px}
+.dictate-lang{width:auto;padding:3px 6px;font-size:11.5px;border:1px solid var(--line);
+  border-radius:var(--r-sm);background:var(--panel)}
+.dictate-heard{font-style:italic;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.dictate-note{color:var(--neg)}
+.mic{width:9px;height:9px;border-radius:50%;background:var(--ink-3);display:inline-block;
+  flex-shrink:0}
+.mic.live{background:#fff;animation:mic-pulse 1.1s ease-in-out infinite}
+@keyframes mic-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
 .thread-row{display:block;width:100%;text-align:left;border:0;background:transparent;
   padding:7px 8px;border-radius:6px;cursor:pointer}
 .thread-row:hover{background:var(--line-2)}

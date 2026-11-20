@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useQuery, sb, insertRow, updateRow } from '@/lib/db';
 import { PROVIDERS, NO_KEYS, providerOption, firstWithKey, hasKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, money, when } from '@/components/ui';
+import Dictate from '@/components/Dictate';
 
 async function agent(body) {
   const { data: { session } } = await sb().auth.getSession();
@@ -218,6 +219,7 @@ export default function Studio() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
               }} />
+            <Dictate onText={(f) => setDraft((cur) => f(cur))} label="Say it instead" />
             <div className="row wrap" style={{ gap: 7 }}>
               {MODES.map(([k, label, blurb]) => (
                 <button key={k} className={`chip ${mode === k ? 'on' : ''}`} title={blurb}
