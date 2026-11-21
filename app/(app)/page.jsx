@@ -3,6 +3,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@/lib/db';
 import { Page, Stat, Badge, Empty, Loading, ErrorNote, Spark, money, when } from '@/components/ui';
+import { Donut, Trend, Bars } from '@/components/Charts';
+import OrderMap from '@/components/OrderMap';
 
 const DAY = 864e5;
 
@@ -10,14 +12,14 @@ export default function Dashboard() {
   const [range, setRange] = useState(30);
   const q = useQuery(async (c) => {
     const r = await Promise.all([
-      c.from('orders').select('*,contacts(full_name)').order('ordered_at', { ascending: false }).limit(300),
-      c.from('order_items').select('quantity,unit_price,order_id,products(cost_price,public_product_name)'),
+      c.from('orders').select('*,contacts(full_name,lifecycle_stage)').order('ordered_at', { ascending: false }).limit(300),
+      c.from('order_items').select('units,unit_price,order_id,products(cost_price,public_product_name,category,fabric)'),
       c.from('opportunities').select('stage,estimated_value'),
       c.from('products').select('product_id,status,stock_qty,public_product_name,retail_price,cost_price'),
       c.from('campaigns').select('*'),
       c.from('campaign_posts').select('*').gte('scheduled_for', new Date().toISOString()).order('scheduled_for').limit(5),
       c.from('contacts').select('contact_id,created_at,lifecycle_stage'),
-      c.from('shipments').select('status,shipped_at,orders(order_number)'),
+      c.from('shipments').select('shipment_id,status,shipped_at,awb,address_city,orders(order_number)'),
       c.from('payments').select('amount,fee,status,paid_at,created_at'),
       c.from('expenses').select('amount,spent_on,category'),
       c.from('tasks').select('*').neq('status', 'Done').order('due_on').limit(6),
@@ -55,7 +57,7 @@ export default function Dashboard() {
   // "Cost" here is what the brand partner is owed on each line, not stock you bought.
   const cogsByOrder = {};
   d.items.forEach((i) => {
-    cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.quantity || 0);
+    cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.units || 0);
   });
   const soldRecent = win(sold, 'ordered_at', now - R, now);
   const cogs30 = soldRecent.reduce((s, o) => s + (cogsByOrder[o.order_id] || 0), 0);
@@ -93,9 +95,52 @@ export default function Dashboard() {
   const unitsByProduct = {};
   d.items.forEach((i) => {
     const n = i.products?.public_product_name;
-    if (n) unitsByProduct[n] = (unitsByProduct[n] || 0) + Number(i.quantity || 0) * Number(i.unit_price || 0);
+    if (n) unitsByProduct[n] = (unitsByProduct[n] || 0) + Number(i.units || 0) * Number(i.unit_price || 0);
   });
   const top = Object.entries(unitsByProduct).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  // Revenue by week, oldest first, over twice the chosen window so a trend has
+  // something to be a trend against.
+  const weeksBack = Math.max(8, Math.round((range * 2) / 7));
+  const weekly = Array.from({ length: weeksBack }, (_, i) => {
+    const to = now - i * 7 * DAY;
+    const from = to - 7 * DAY;
+    const value = win(sold, 'ordered_at', from, to)
+      .reduce((s, o) => s + Number(o.total || 0), 0);
+    const day = new Date(from);
+    return { label: `${day.getDate()} ${day.toLocaleString('en-GB', { month: 'short' })}`, value };
+  }).reverse();
+
+  const STATUS_HUE = {
+    Fulfilled: 'var(--pos)', Processing: 'var(--warn)', 'Pending Payment': 'var(--info)',
+    Draft: 'var(--ink-3)', Cancelled: 'var(--neg)',
+  };
+  const byStatus = Object.entries(
+    d.orders.reduce((acc, o) => {
+      const k = o.order_status || 'Unknown';
+      acc[k] = (acc[k] || 0) + 1; return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value, colour: STATUS_HUE[label] }));
+
+  const recentIds = new Set(soldRecent.map((o) => o.order_id));
+  const byCategory = Object.entries(
+    d.items.filter((i) => recentIds.has(i.order_id)).reduce((acc, i) => {
+      const k = i.products?.category || i.products?.fabric || 'Uncategorised';
+      acc[k] = (acc[k] || 0) + Number(i.units || 0) * Number(i.unit_price || 0);
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value, display: money(value) }))
+   .sort((a, b) => b.value - a.value);
+
+  const STAGE_ORDER = ['New', 'Lead', 'Qualified', 'Opportunity', 'Customer'];
+  const stageCounts = d.contacts.reduce((acc, c) => {
+    const k = c.lifecycle_stage || 'Unknown';
+    acc[k] = (acc[k] || 0) + 1; return acc;
+  }, {});
+  const byStage = [...STAGE_ORDER.filter((k) => stageCounts[k]),
+                   ...Object.keys(stageCounts).filter((k) => !STAGE_ORDER.includes(k))]
+    .map((label) => ({ label, value: stageCounts[label],
+                       colour: label === 'Customer' ? 'var(--pos)' : undefined }));
   const topMax = Math.max(1, ...top.map((t) => t[1]));
 
   return (
@@ -137,6 +182,55 @@ export default function Dashboard() {
         <Stat label="Hard to get" value={lowStock.length}
           delta={lowStock.length ? 'check with the partner' : 'all available'}
           tone={lowStock.length ? 'down' : ''} />
+      </div>
+
+      <div className="grid g2" style={{ marginBottom: 14 }}>
+        <div className="card">
+          <div className="card-head"><h3>Revenue, week by week</h3>
+            <span className="small faint">last {Math.round(range / 7) * 2 || 8} weeks</span></div>
+          <div className="card-body">
+            <Trend points={weekly} format={(n) => money(n)}
+              caption={weekly.length > 1
+                ? `Highest week ${money(Math.max(...weekly.map((w) => w.value)))}.` : ''} />
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-head"><h3>Where the orders are</h3>
+            <Link className="link small" href="/orders">Orders</Link></div>
+          <div className="card-body">
+            <Donut data={byStatus} size={150}
+              centre={{ value: d.orders.length, label: 'orders' }}
+              caption="Every order on the books, by what stage it is at." />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid g2" style={{ marginBottom: 14 }}>
+        <div className="card">
+          <div className="card-head"><h3>What sells</h3>
+            <span className="small faint">by value, {range} days</span></div>
+          <div className="card-body">
+            <Donut data={byCategory} size={150} caption={byCategory.length
+              ? 'Line items in the window, grouped by what kind of piece they are.'
+              : 'Add line items to orders and this fills in.'} />
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-head"><h3>Who is buying</h3>
+            <Link className="link small" href="/contacts">Contacts</Link></div>
+          <div className="card-body">
+            <Bars data={byStage} format={(n) => `${n}`}
+              caption="Contacts by the stage they have reached." />
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-head"><h3>Where your customers are</h3>
+          <Link className="link small" href="/shipments">Shipments</Link></div>
+        <div className="card-body">
+          <OrderMap orders={d.orders} shipments={d.shipments} />
+        </div>
       </div>
 
       <div className="grid g2">

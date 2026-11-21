@@ -396,6 +396,33 @@ option{background:var(--panel);color:var(--ink)}
 .shot-flag{position:absolute;left:0;right:0;bottom:0;background:var(--neg);color:#fff;
   font-size:10.5px;font-weight:600;text-align:center;padding:3px 4px;letter-spacing:.01em}
 
+/* ============ charts and the map ============ */
+.chart-svg{width:100%;height:auto;display:block;overflow:visible}
+.chart-wrap{position:relative}
+.chart-donut{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.donut-value{font-size:19px;font-weight:600;fill:var(--ink);letter-spacing:-.02em}
+.donut-label{font-size:10.5px;fill:var(--ink-3)}
+.chart-legend{flex:1;min-width:150px;display:flex;flex-direction:column;gap:4px}
+.legend-row{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:2px 4px;
+  border-radius:5px;transition:background .14s var(--ease)}
+.legend-row.on{background:var(--line-2)}
+.legend-row b{width:9px;height:9px;border-radius:3px;flex-shrink:0;display:inline-block}
+.legend-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--ink-2)}
+.legend-val{font-weight:600;font-variant-numeric:tabular-nums}
+.legend-pct{color:var(--ink-3);width:34px;text-align:right;font-variant-numeric:tabular-nums}
+
+.map-wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px}
+.map-plot{min-width:0}
+.map-bg{fill:var(--line-2)}
+.map-grid{stroke:var(--line);stroke-width:1;opacity:.55}
+.map-tick{font-size:9px;fill:var(--ink-3)}
+.map-dot{fill:var(--accent);fill-opacity:.22;stroke:var(--accent);
+  transition:fill-opacity .15s var(--ease),stroke-width .15s var(--ease)}
+.map-dot:hover{fill-opacity:.4}
+.map-core{fill:var(--accent)}
+.map-name{font-size:10px;fill:var(--ink-2);font-weight:600;pointer-events:none}
+
 /* ============ screens, last so they override what is above ============ */
 @media (max-width:900px){
   .shell{grid-template-columns:1fr}
@@ -431,6 +458,8 @@ option{background:var(--panel);color:var(--ink)}
   .card>.card-body>.table,.card>.card-body>table{display:block;overflow-x:auto;max-width:100%}
 
   .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .map-wrap{grid-template-columns:1fr}
+  .chart-donut{justify-content:center}
   .stat{padding:11px 12px}
   .stat .value{font-size:20px}
   .shots{grid-template-columns:repeat(auto-fill,minmax(86px,1fr))}
