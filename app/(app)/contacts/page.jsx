@@ -1,6 +1,7 @@
 'use client';
 import CrudPage from '@/components/CrudPage';
 import Children from '@/components/Children';
+import Journey from '@/components/Journey';
 
 export default function Contacts() {
   return <CrudPage cfg={{
@@ -9,6 +10,7 @@ export default function Contacts() {
     order: ['created_at', false],
     sidePanel: (row) => (
       <div className="stack">
+        <Journey contactId={row.contact_id} />
         <Children parentId={row.contact_id} cfg={{
           table: 'journey_events', pk: 'event_id', parentKey: 'contact_id',
           title: 'Journey', order: 'occurred_at',
@@ -20,7 +22,9 @@ export default function Contacts() {
           ],
           fields: [
             { name: 'kind', label: 'What happened', width: 150,
-              options: ['enquiry', 'whatsapp_in', 'whatsapp_out', 'ig_dm', 'showroom_view', 'return'] },
+              options: ['Saw ad', 'Clicked', 'Viewed product', 'Added to cart', 'Enquired',
+                        'Ordered', 'Delivered', 'Returned', 'whatsapp_in', 'whatsapp_out',
+                        'ig_dm', 'showroom_view'] },
             { name: 'detail', label: 'Detail', width: 200 },
             { name: 'source', label: 'Where', width: 120,
               options: ['Manual', 'WhatsApp', 'Instagram', 'Website', 'Phone'] },
@@ -76,6 +80,9 @@ export default function Contacts() {
       { key: 'country', label: 'Country' },
       { key: 'lead_score', label: 'Score', num: true },
     ],
+    // The same list gets uploaded again with a few more people on it, so match
+    // on something that identifies a person rather than making duplicates.
+    matchOn: ['email', 'phone_number'],
     sheet: [
       { key: 'full_name', label: 'Full name', required: true, example: 'Meher Siddiqui' },
       { key: 'contact_type', label: 'Type', example: 'B2B', hint: 'B2C, B2B, Both or Unknown' },
@@ -85,9 +92,18 @@ export default function Contacts() {
       { key: 'business_category', label: 'Business category', example: 'Boutique' },
       { key: 'lifecycle_stage', label: 'Stage', example: 'Lead', hint: 'New, Lead, Opportunity, Customer, Dormant' },
       { key: 'qualification_status', label: 'Qualification', example: 'Unreviewed' },
-      { key: 'lead_score', label: 'Lead score', example: 50 },
+      { key: 'lead_score', label: 'Lead score', type: 'number', example: 50 },
       { key: 'source_name', label: 'Source', example: 'Instagram DM' },
       { key: 'website', label: 'Instagram or website', example: 'instagram.com/meher' },
+      { key: 'city', label: 'City', example: 'Varanasi',
+        hint: 'Used to put them on the map and to work out shipping' },
+      { key: 'state', label: 'State', example: 'Uttar Pradesh' },
+      { key: 'pincode', label: 'Pincode', example: '221001' },
+      { key: 'whatsapp_opt_in', label: 'WhatsApp opt-in', type: 'boolean', example: 'yes',
+        hint: 'yes only if they actually agreed. Sending without it gets the number blocked' },
+      { key: 'email_opt_in', label: 'Email opt-in', type: 'boolean', example: 'no', hint: 'yes or no' },
+      { key: 'import_batch', label: 'Batch name', example: 'Nov instagram export',
+        hint: 'Anything that names this upload, so a bad sheet can be found again' },
       { key: 'relevance_reason', label: 'Notes', example: 'Repeat wholesale buyer' },
     ],
     fields: [

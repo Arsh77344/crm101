@@ -396,6 +396,23 @@ option{background:var(--panel);color:var(--ink)}
 .shot-flag{position:absolute;left:0;right:0;bottom:0;background:var(--neg);color:#fff;
   font-size:10.5px;font-weight:600;text-align:center;padding:3px 4px;letter-spacing:.01em}
 
+.group-card{padding:11px 12px;text-align:left;cursor:pointer;border:1px solid var(--line);
+  background:var(--panel);transition:border-color .16s var(--ease),background .16s var(--ease)}
+.group-card:hover{border-color:var(--ink-3)}
+.group-card.on{border-color:var(--accent);background:var(--accent-wash)}
+
+/* ============ a customer's journey ============ */
+.journey{display:flex;align-items:flex-start;gap:0;flex-wrap:wrap}
+.journey-step{position:relative;flex:1;min-width:62px;text-align:center}
+.journey-dot{width:18px;height:18px;border-radius:50%;margin:0 auto 5px;
+  background:var(--line-2);border:2px solid var(--line);position:relative;z-index:1;
+  font-size:9.5px;font-weight:700;color:var(--ink-2);display:grid;place-items:center}
+.journey-step.done .journey-dot{background:var(--accent);border-color:var(--accent);color:#fff}
+.journey-line{position:absolute;top:9px;left:50%;width:100%;height:2px;background:var(--line);z-index:0}
+.journey-step.done .journey-line{background:var(--accent);opacity:.45}
+.journey-label{font-size:10.5px;color:var(--ink-3);line-height:1.25;padding:0 2px}
+.journey-step.done .journey-label{color:var(--ink-2);font-weight:500}
+
 /* ============ charts and the map ============ */
 .chart-svg{width:100%;height:auto;display:block;overflow:visible}
 .chart-wrap{position:relative}
@@ -458,7 +475,7 @@ option{background:var(--panel);color:var(--ink)}
   .card>.card-body>.table,.card>.card-body>table{display:block;overflow-x:auto;max-width:100%}
 
   .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
-  .map-wrap{grid-template-columns:1fr}
+  .map-wrap,.outreach-grid{grid-template-columns:1fr !important}
   .chart-donut{justify-content:center}
   .stat{padding:11px 12px}
   .stat .value{font-size:20px}

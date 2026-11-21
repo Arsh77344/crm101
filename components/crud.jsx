@@ -99,7 +99,8 @@ export default function Crud({ cfg }) {
 
       {cfg.sheet && sheetOpen && (
         <div style={{ marginBottom: 16 }}>
-          <Sheet cfg={{ table: cfg.table, singular: cfg.singular, columns: cfg.sheet }}
+          <Sheet cfg={{ table: cfg.table, singular: cfg.singular, columns: cfg.sheet,
+                        pk: cfg.pk, matchOn: cfg.matchOn }}
             onDone={() => { main.reload(); setSheetOpen(false); }} />
         </div>)}
 

@@ -7,6 +7,30 @@ import { sb, clean } from '@/lib/db';
  * Import from and export to Excel or CSV.
  * cfg: { table, singular, columns: [{ key, label, required, example, hint }], select }
  */
+const YES = /^(y|yes|true|1|✓|opted in)$/i;
+const NO = /^(n|no|false|0|-|opted out)$/i;
+
+function coerce(row, columns) {
+  const out = { ...row };
+  columns.forEach((c) => {
+    const v = out[c.key];
+    if (v === undefined || v === null || v === '') return;
+    if (c.type === 'boolean') {
+      const text = String(v).trim();
+      out[c.key] = YES.test(text) ? true : NO.test(text) ? false : null;
+    }
+    if (c.type === 'number') {
+      const n = Number(String(v).replace(/[^\d.-]/g, ''));
+      out[c.key] = Number.isFinite(n) ? n : null;
+    }
+    if (c.type === 'date') {
+      const d = new Date(v);
+      out[c.key] = Number.isNaN(d.getTime()) ? null : d.toISOString();
+    }
+  });
+  return out;
+}
+
 export default function Sheet({ cfg, onDone }) {
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null);
@@ -70,7 +94,10 @@ export default function Sheet({ cfg, onDone }) {
         const isNote = Object.values(line).every((v) => ['required', 'optional'].includes(String(v).trim()));
         if (isNote) return;
         if (missing.length) skipped.push(`Row ${i + 2}: missing ${missing.join(', ')}`);
-        else mapped.push(cfg.transform ? cfg.transform(row) : row);
+        else {
+          const tidy = coerce(row, cfg.columns);
+          mapped.push(cfg.transform ? cfg.transform(tidy) : tidy);
+        }
       });
 
       const unknown = Object.keys(raw[0]).filter((k) => !byLabel[String(k).toLowerCase().trim()]);
@@ -83,12 +110,40 @@ export default function Sheet({ cfg, onDone }) {
     if (!preview?.rows.length) return;
     setBusy(true); setErr('');
     try {
+      let added = 0, updated = 0;
       for (let i = 0; i < preview.rows.length; i += 100) {
         const chunk = preview.rows.slice(i, i + 100).map(clean);
-        const { error } = await sb().from(cfg.table).insert(chunk);
-        if (error) throw error;
+        if (cfg.matchOn) {
+          // Update the row that is already there rather than making a second
+          // copy of the same person.
+          for (const row of chunk) {
+            const key = cfg.matchOn.find((k) => row[k]);
+            let existing = null;
+            if (key) {
+              const { data } = await sb().from(cfg.table).select(cfg.pk)
+                .eq(key, row[key]).limit(1).maybeSingle();
+              existing = data;
+            }
+            if (existing) {
+              const { error } = await sb().from(cfg.table).update(row)
+                .eq(cfg.pk, existing[cfg.pk]);
+              if (error) throw error;
+              updated += 1;
+            } else {
+              const { error } = await sb().from(cfg.table).insert(row);
+              if (error) throw error;
+              added += 1;
+            }
+          }
+        } else {
+          const { error } = await sb().from(cfg.table).insert(chunk);
+          if (error) throw error;
+          added += chunk.length;
+        }
       }
-      setMsg(`Imported ${preview.rows.length} rows.`);
+      setMsg(cfg.matchOn
+        ? `${added} new, ${updated} already here and updated.`
+        : `Imported ${preview.rows.length} rows.`);
       setPreview(null);
       onDone?.();
     } catch (e) { setErr(e.message || String(e)); }
