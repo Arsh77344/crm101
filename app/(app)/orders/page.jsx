@@ -1,6 +1,7 @@
 'use client';
 import CrudPage from '@/components/CrudPage';
 import Children from '@/components/Children';
+import Parcels from '@/components/Parcels';
 import { money } from '@/components/ui';
 
 export default function Orders() {
@@ -32,13 +33,15 @@ export default function Orders() {
       { key: 'total', label: 'Total', fmt: 'money', num: true },
     ],
     sidePanel: (row) => (
+      <div className="stack">
+      <Parcels orderId={row.order_id} />
       <Children parentId={row.order_id} cfg={{
-        table: 'order_items', pk: 'item_id', parentKey: 'order_id', title: 'Items on this order',
+        table: 'order_items', pk: 'order_item_id', parentKey: 'order_id', title: 'Items on this order',
         select: '*,products(public_product_name)',
         columns: [
           { key: 'name', label: 'Item' },
           { key: 'sku', label: 'SKU' },
-          { key: 'units', label: 'Qty', num: true },
+          { key: 'quantity', label: 'Qty', num: true },
           { key: 'unit_price', label: 'Unit', fmt: 'money', num: true },
         ],
         fields: [
@@ -47,11 +50,12 @@ export default function Orders() {
           { name: 'product_id', label: 'Piece', width: 170,
             lookup: { table: 'products', pk: 'product_id', label: 'public_product_name' } },
           { name: 'sku', label: 'SKU', width: 110 },
-          { name: 'units', label: 'Qty', type: 'number', width: 70 },
+          { name: 'quantity', label: 'Qty', type: 'number', width: 70 },
           { name: 'unit_price', label: 'Unit price', type: 'number', step: '0.01', width: 110, required: true },
           { name: 'hsn', label: 'HSN', width: 90, hint: 'Sarees are usually 5007.' },
         ],
-      }} />),
+      }} />
+      </div>),
     sheet: [
       { key: 'order_number', label: 'Order number', required: true, example: 'ORD-1046' },
       { key: 'order_type', label: 'Type', example: 'B2C' },
@@ -61,7 +65,7 @@ export default function Orders() {
       { key: 'external_order_reference', label: 'External reference', example: '' },
     ],
     fields: [
-      { name: 'order_number', label: 'Order number', placeholder: 'USY-1046' },
+      { name: 'order_number', section: 'The order', label: 'Order number', placeholder: 'ZRV-1046' },
       { name: 'contact_id', label: 'Customer', lookup: { table: 'contacts', pk: 'contact_id', label: 'full_name' } },
       { name: 'company_id', label: 'Company', lookup: { table: 'companies', pk: 'company_id', label: 'company_name' } },
       { name: 'order_type', label: 'Type', options: ['B2C', 'B2B'] },
@@ -70,11 +74,11 @@ export default function Orders() {
       { name: 'shipping', label: 'Shipping', type: 'number', step: '0.01',
         hint: 'Subtotal and total are worked out from the items below.' },
       { name: 'external_order_reference', label: 'External reference', placeholder: 'Wix or Shopify order id' },
-      { name: 'payment_method', label: 'Paid how', options: ['Prepaid', 'COD'],
+      { name: 'payment_method', section: 'Payment and parcel', label: 'Paid how', options: ['Prepaid', 'COD'],
         hint: 'COD changes which couriers will take it.' },
       { name: 'weight_kg', label: 'Parcel weight (kg)', type: 'number', step: '0.01',
         hint: 'A folded saree in a poly bag is about 0.6. The courier bills on this.' },
-      { name: 'ship_name', label: 'Deliver to', placeholder: 'The name on the parcel' },
+      { name: 'ship_name', section: 'Where it goes', label: 'Deliver to', placeholder: 'The name on the parcel' },
       { name: 'ship_phone', label: 'Phone', placeholder: '98XXXXXXXX' },
       { name: 'ship_email', label: 'Email', placeholder: '' },
       { name: 'ship_line1', label: 'Address', placeholder: 'House, street' },

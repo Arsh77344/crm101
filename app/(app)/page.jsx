@@ -13,7 +13,7 @@ export default function Dashboard() {
   const q = useQuery(async (c) => {
     const r = await Promise.all([
       c.from('orders').select('*,contacts(full_name,lifecycle_stage)').order('ordered_at', { ascending: false }).limit(300),
-      c.from('order_items').select('units,unit_price,order_id,products(cost_price,public_product_name,category,fabric)'),
+      c.from('order_items').select('quantity,unit_price,order_id,products(cost_price,public_product_name,category,fabric)'),
       c.from('opportunities').select('stage,estimated_value'),
       c.from('products').select('product_id,status,stock_qty,public_product_name,retail_price,cost_price'),
       c.from('campaigns').select('*'),
@@ -57,7 +57,7 @@ export default function Dashboard() {
   // "Cost" here is what the brand partner is owed on each line, not stock you bought.
   const cogsByOrder = {};
   d.items.forEach((i) => {
-    cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.units || 0);
+    cogsByOrder[i.order_id] = (cogsByOrder[i.order_id] || 0) + Number(i.products?.cost_price || 0) * Number(i.quantity || 0);
   });
   const soldRecent = win(sold, 'ordered_at', now - R, now);
   const cogs30 = soldRecent.reduce((s, o) => s + (cogsByOrder[o.order_id] || 0), 0);
@@ -95,7 +95,7 @@ export default function Dashboard() {
   const unitsByProduct = {};
   d.items.forEach((i) => {
     const n = i.products?.public_product_name;
-    if (n) unitsByProduct[n] = (unitsByProduct[n] || 0) + Number(i.units || 0) * Number(i.unit_price || 0);
+    if (n) unitsByProduct[n] = (unitsByProduct[n] || 0) + Number(i.quantity || 0) * Number(i.unit_price || 0);
   });
   const top = Object.entries(unitsByProduct).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
@@ -126,7 +126,7 @@ export default function Dashboard() {
   const byCategory = Object.entries(
     d.items.filter((i) => recentIds.has(i.order_id)).reduce((acc, i) => {
       const k = i.products?.category || i.products?.fabric || 'Uncategorised';
-      acc[k] = (acc[k] || 0) + Number(i.units || 0) * Number(i.unit_price || 0);
+      acc[k] = (acc[k] || 0) + Number(i.quantity || 0) * Number(i.unit_price || 0);
       return acc;
     }, {})
   ).map(([label, value]) => ({ label, value, display: money(value) }))

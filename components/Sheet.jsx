@@ -23,6 +23,15 @@ function coerce(row, columns) {
       const n = Number(String(v).replace(/[^\d.-]/g, ''));
       out[c.key] = Number.isFinite(n) ? n : null;
     }
+    // Digits held as text: a pincode or a phone. Excel hands these back as
+    // numbers when the cell was formatted as one, and "221001" arriving as
+    // 221001.0 fails every six-digit check downstream.
+    if (c.type === 'digits') {
+      // A trailing .0 goes first: stripping every non-digit from "221001.0"
+      // would otherwise yield 2210010, which is worse than what came in.
+      const d = String(v).trim().replace(/\.0+$/, '').replace(/\D/g, '');
+      out[c.key] = d || null;
+    }
     if (c.type === 'date') {
       const d = new Date(v);
       out[c.key] = Number.isNaN(d.getTime()) ? null : d.toISOString();

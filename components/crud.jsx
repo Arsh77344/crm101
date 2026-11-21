@@ -17,6 +17,20 @@ function cell(row, col) {
   return raw === null || raw === undefined || raw === '' ? <span className="faint">—</span> : String(raw);
 }
 
+// Fields in the order given, cut into groups wherever one names a new section.
+// A form with no sections comes out as a single unnamed group, so nothing
+// changes for the pages that do not use this.
+function grouped(fields) {
+  const out = [];
+  for (const f of fields) {
+    if (!out.length || (f.section && f.section !== out[out.length - 1].name)) {
+      out.push({ name: f.section ?? null, fields: [] });
+    }
+    out[out.length - 1].fields.push(f);
+  }
+  return out;
+}
+
 export default function Crud({ cfg }) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -154,7 +168,10 @@ export default function Crud({ cfg }) {
               <div className="card-head"><h3>{id === 'new' ? `New ${cfg.singular}` : `Edit ${cfg.singular}`}</h3>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => go(null)}>Close</button></div>
               <div className="card-body">
-                {cfg.fields.map((f) => (
+                {grouped(cfg.fields).map((g, gi) => (
+                <fieldset className="fields" key={g.name ?? gi}>
+                  {g.name && <legend>{g.name}</legend>}
+                  {g.fields.map((f) => (
                   <div className="field" key={f.name}>
                     <label>{f.label}</label>
                     {f.type === 'textarea' ? (
@@ -178,6 +195,8 @@ export default function Crud({ cfg }) {
                     )}
                     {f.hint && <span className="hint">{f.hint}</span>}
                   </div>
+                  ))}
+                </fieldset>
                 ))}
               </div>
               <div className="card-foot row">

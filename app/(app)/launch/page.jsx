@@ -476,7 +476,7 @@ export default function Launch() {
                   <input value={piece.public_product_name} placeholder="Mashru Silk Banarasi — Deep Magenta"
                     onChange={(e) => setPiece({ ...piece, public_product_name: e.target.value })} /></div>
                 <div className="field"><label>SKU</label>
-                  <input value={piece.internal_sku} placeholder="USY-MS-012"
+                  <input value={piece.internal_sku} placeholder="ZRV-MS-012"
                     onChange={(e) => setPiece({ ...piece, internal_sku: e.target.value })} /></div>
                 <div className="field"><label>Category</label>
                   <input value={piece.category} onChange={(e) => setPiece({ ...piece, category: e.target.value })} /></div>
