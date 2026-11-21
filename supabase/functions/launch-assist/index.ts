@@ -236,13 +236,39 @@ function propFor(i: number) {
   return PROPS[i % PROPS.length];
 }
 
-function setBlock(setId: unknown, mode: string, cutoutOnWhite: boolean) {
-  const line = SETS[String(setId ?? "")] || "";
+// The set a look implies, in the same words a set is written in. The editorial
+// frames are built from the look's own breakdown; these lines let the studio
+// stills stand in the same place, so a page of them reads as one shoot rather
+// than a location shoot next to a studio one.
+function lookSet(look: any) {
+  const parts = [look?.setting, look?.light, look?.palette]
+    .map((x: unknown) => String(x ?? "").trim()).filter(Boolean);
+  return parts.length ? parts.join(", ") : "";
+}
+
+function setBlock(line: string, mode: string, cutoutOnWhite: boolean, fromLook = false) {
   if (!line) return "";
   if (mode === "Clean" && cutoutOnWhite) {
     return `\n\nBackground: a plain pure-white sweep, because this frame is a catalogue cut-out `
       + `for a marketplace listing. The garment lies flat and square to camera, evenly lit, with `
       + `only the faintest contact shadow. No props, no furniture, nothing else in the frame.`;
+  }
+  if (fromLook) {
+    // What stands in that place depends on the shot. Telling a mannequin frame
+    // it is a still life of the cloth is how the dress form goes missing.
+    const who = mode === "Model"
+      ? `The woman wearing it stands in that place.`
+      : mode === "Mannequin"
+        ? `There is no person in this frame: the dress form stands in that place, with the `
+          + `garment draped on it.`
+        : `There is no person and no mannequin in this frame — it is a still life of the cloth `
+          + `in that place.`;
+    return `\n\nThis frame belongs to one shoot with the editorial frames being made in this run, `
+      + `and must look like it was taken in the same place on the same day. That place is `
+      + `${line}. Keep the same background, the same palette and the same quality and direction `
+      + `of light. ${who} Use a quiet corner of it rather than the full scene, and let the `
+      + `background fall soft and out of focus behind the subject. Do not restage it as a white `
+      + `studio.`;
   }
   return `\n\nThis frame belongs to one shoot with the others being made in this run. `
     + `The set for all of them is ${line}. Keep that same wall, floor, palette and quality of `
@@ -261,9 +287,18 @@ dress form in a single neutral colour, faceless and without hair, standing on it
 a shop uses. The garment is draped over that body and takes its shape from it — shoulder, waist and
 fall all supported. The fabric must not float, hover or hold a shape with nothing inside it, and
 there must be no empty gap where a body should be. Show the mannequin's stand. Full length in frame,
-soft studio lighting.`,
+soft lighting; the set described below decides where it stands.`,
   Model: `${FIDELITY}\nWorn by a woman standing in a relaxed, natural pose, full length in frame,
-plain neutral studio background, soft daylight. Keep the garment the subject of the photograph.`,
+soft daylight. Unless the set described below says otherwise, put her against a plain neutral
+studio background. Keep the garment the subject of the photograph.`,
+  Fabric: `${FIDELITY}\nThe cloth itself, laid out and nobody wearing it: no person, no
+mannequin, no dress form. The saree is unfolded along the surface and allowed to lie the way heavy
+silk lies, in a few soft natural folds rather than pressed flat, so its length reads across the
+frame and the border runs with it. Arrange it so three things are readable in one photograph: the
+field of the cloth, the border along its edge, and the pallu. Shot slightly from above, the whole
+arrangement in frame, one soft key light raking low across the weave so the texture and any zari
+catch it, with a gentle shadow where the folds meet the surface. This is a fabric study, so the
+cloth fills most of the frame and the setting is only the ground it rests on.`,
   Detail: `${FIDELITY}\nA close macro of the cloth, filling the frame: the border meeting the
 body, or the pallu, whichever the photographs show best. Close enough that the weave, the thread and
 the texture read clearly, with the fabric falling in soft folds over whatever it is resting on and
@@ -694,15 +729,18 @@ Deno.serve(async (req) => {
         return json({ error: "Generated imagery needs a Gemini key (GEMINI_API_KEY). ChatGPT, Claude, Groq and NVIDIA do not produce images." }, 400);
       }
       const mode = String(p.mode ?? "Clean");
-      const scene = setBlock(p.set_id, mode, p.cutout_on_white !== false);
       const wantCheck = p.check !== false;
       const editorial = mode === "Editorial";
       if (!editorial && !SHOT[mode]) return json({ error: `Unknown imagery style "${mode}".` }, 400);
       if (!images.length) return json({ error: "Upload at least one photo of the piece first." }, 400);
 
+      // A look is loaded whenever one is named. An editorial run needs it; a
+      // studio still wants it only when the owner asked for the set to match,
+      // so the two kinds of frame come out of the same room.
+      const matchLook = String(p.set_id ?? "") === "look";
       let look: any = null;
-      if (editorial) {
-        if (!p.look_id) return json({ error: "Pick a look for an editorial shoot." }, 400);
+      if (editorial || (matchLook && p.look_id)) {
+        if (editorial && !p.look_id) return json({ error: "Pick a look for an editorial shoot." }, 400);
         const got = await admin.from("looks").select("*").eq("look_id", p.look_id).maybeSingle();
         if (!got.data) return json({ error: "That look no longer exists." }, 400);
         look = got.data;
@@ -710,6 +748,16 @@ Deno.serve(async (req) => {
           return json({ error: `"${look.name}" has not been read yet. Open it and read the reference first.` }, 400);
         }
       }
+      if (matchLook && !look) {
+        return json({ error: "Pick a look to match, or choose one of the studio sets." }, 400);
+      }
+
+      const setLine = matchLook ? lookSet(look) : (SETS[String(p.set_id ?? "")] || "");
+      if (matchLook && !setLine) {
+        return json({ error: `"${look.name}" records no setting, light or palette to match. `
+          + `Read the reference again, or pick one of the studio sets.` }, 400);
+      }
+      const scene = setBlock(setLine, mode, p.cutout_on_white !== false, matchLook);
 
       const count = Math.max(1, Math.min(4, Number(p.count) || 1));
       const sources: Inline[] = [];
@@ -753,11 +801,20 @@ Deno.serve(async (req) => {
             oneImage(`${SHOT[mode]}${assemble}${scene}`
               + ((mode === "Clean" && p.cutout_on_white !== false)
                 ? ""
-                : (mode === "Clean" || mode === "Detail")
-                  ? `\n\nHow it sits in the frame: ${propFor(i + (p.prop_from ?? 0))}. `
-                    + `Whatever it rests on is plain and belongs to this set — bare wood, stone, `
-                    + `cane or undyed linen, nothing patterned, nothing that competes with the `
-                    + `cloth and nothing branded.`
+                : (mode === "Clean" || mode === "Detail" || mode === "Fabric")
+                  ? (matchLook
+                      // A borrowed set is a real place, so the piece rests on what that place
+                      // already has. Carrying in the studio's chair or stool would give away
+                      // that this frame was staged somewhere else.
+                      ? `\n\nHow it sits in the frame: resting on whatever surface that place `
+                        + `itself offers — a step, a ledge, a sill, a low wall, bare wood or `
+                        + `stone. Bring no furniture or props into it that were not already `
+                        + `there. Nothing patterned, nothing that competes with the cloth, `
+                        + `nothing branded.`
+                      : `\n\nHow it sits in the frame: ${propFor(i + (p.prop_from ?? 0))}. `
+                        + `Whatever it rests on is plain and belongs to this set — bare wood, `
+                        + `stone, cane or undyed linen, nothing patterned, nothing that competes `
+                        + `with the cloth and nothing branded.`)
                   : `\n\nCamera: ${angleFor(i, p.angles)}`)
               + `\n\nWhat the piece is:\n`
               + (describe(p.piece ?? {}, "") || "Not described.") + tweakBlock(p.tweak), sources)));
@@ -776,9 +833,17 @@ Deno.serve(async (req) => {
             made.push(await store(admin, folder, mode.toLowerCase(), i, r.value,
               { mode, shot_angle: mode === "Detail" ? "Close macro of the cloth"
                         : angleFor(i, p.angles),
-                look_id: null, look_name: null, set_id: p.set_id ?? null, check: verdict }));
+                look_id: matchLook ? look.look_id : null,
+                look_name: matchLook ? look.name : null,
+                set_id: p.set_id ?? null, check: verdict }));
           } catch (e) { failed.push(e instanceof Error ? e.message : String(e)); }
         }
+      }
+
+      if (matchLook && look && made.length) {
+        await admin.from("looks").update({
+          times_used: (look.times_used ?? 0) + 1, last_used_at: new Date().toISOString(),
+        }).eq("look_id", look.look_id);
       }
 
       if (!made.length) throw new Error(failed[0] || "No images came back.");

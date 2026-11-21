@@ -26,13 +26,14 @@ const STAGE = {
 
 const IMAGERY = [
   ['Clean', 'Studio still', 'The piece itself, styled on the set. White cut-out optional.'],
+  ['Fabric', 'Fabric laid out', 'The cloth unfolded on the surface — field, border and pallu readable. Nobody wearing it.'],
   ['Mannequin', 'AI mannequin', 'Draped on a plain dress form that holds its shape. No person.'],
   ['Model', 'AI model', 'Worn by a generated model. Slower and dearer.'],
   ['Detail', 'Close-up of the cloth', 'A macro of the border or pallu, on the set. Always included.'],
   ['Editorial', 'Editorial shoot', 'Built from a look in your library. Needs a look chosen.'],
 ];
 // A close-up proves the cloth, so a run never goes out without one.
-const NO_COUNTS = { Clean: 0, Mannequin: 0, Model: 0, Detail: 1, Editorial: 0 };
+const NO_COUNTS = { Clean: 0, Fabric: 0, Mannequin: 0, Model: 0, Detail: 1, Editorial: 0 };
 
 export default function Launch() {
   const [err, setErr] = useState('');
@@ -178,6 +179,9 @@ export default function Launch() {
     const sets = (keys?.sets || []).map((x) => x.id);
     const setId = imagery.set_id
       || (sets.length ? sets[Math.floor(Math.random() * sets.length)] : '');
+    // A borrowed set needs the look passed on every frame, not just the
+    // editorial ones, because that is where the background comes from.
+    const matchLook = imagery.set_id === 'look' && Boolean(imagery.look_id);
     // Start the prop rotation somewhere new, so the second run of a piece is not
     // the first one again.
     const propFrom = Math.floor(Math.random() * 6);
@@ -188,7 +192,7 @@ export default function Launch() {
       try {
         const out = await assist({
           action: 'images', provider: 'gemini', mode, count: runCounts[mode],
-          look_id: mode === 'Editorial' ? imagery.look_id : null,
+          look_id: (mode === 'Editorial' || matchLook) ? imagery.look_id : null,
           set_id: mode === 'Editorial' ? null : setId,
           cutout_on_white: imagery.cutout_on_white, check: imagery.check, prop_from: propFrom,
           tweak: imagery.tweak, piece,
@@ -519,6 +523,7 @@ export default function Launch() {
                         <div className="small muted" style={{ marginTop: 2 }}>{blurb}</div>
                       </div>
                       <select value={imagery.counts[key] || 0} style={{ width: 78 }}
+                        data-shot={key} aria-label={`How many ${title} images`}
                         onChange={(e) => setImagery({
                           ...imagery,
                           counts: { ...imagery.counts, [key]: Number(e.target.value) },
@@ -541,16 +546,23 @@ export default function Launch() {
 
                 <div className="form-grid">
                   <div className="field"><label>The set they all share</label>
-                    <select value={imagery.set_id}
+                    <select value={imagery.set_id} data-pick="set"
                       onChange={(e) => setImagery({ ...imagery, set_id: e.target.value })}>
                       <option value="">Pick one for me</option>
+                      <option value="look" disabled={!imagery.look_id}>
+                        Match the editorial look{imagery.look_id ? '' : ' — choose a look first'}
+                      </option>
                       {(keys?.sets || []).map((x) => (
                         <option key={x.id} value={x.id}>{x.name}</option>))}
                     </select>
                     <span className="hint">
-                      Every frame in the run but the editorial ones shares this room and this light.
-                      The camera and the placement move; the background does not. Say what to change
-                      about it in the box below.
+                      {imagery.set_id === 'look'
+                        ? 'The studio frames are put in the same place as the editorial ones — '
+                          + 'the same background, palette and light, with nobody in them. '
+                          + 'The whole run then reads as one shoot.'
+                        : 'Every frame in the run but the editorial ones shares this room and '
+                          + 'this light. The camera and the placement move; the background does '
+                          + 'not. Say what to change about it in the box below.'}
                     </span></div>
                   <div className="field"><label>The studio stills</label>
                     <select value={imagery.cutout_on_white ? 'white' : 'set'}
@@ -595,8 +607,10 @@ export default function Launch() {
                         </div>)
                       : (
                         <>
-                          <select value={imagery.look_id}
-                            onChange={(e) => setImagery({ ...imagery, look_id: e.target.value })}>
+                          <select value={imagery.look_id} data-pick="look"
+                            onChange={(e) => setImagery({ ...imagery, look_id: e.target.value,
+                              set_id: e.target.value ? imagery.set_id
+                                : (imagery.set_id === 'look' ? '' : imagery.set_id) })}>
                             <option value="">Choose a look…</option>
                             {(q.data?.looks || []).map((l) => {
                               const u = (q.data?.lookUse || {})[l.look_id];
