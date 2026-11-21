@@ -919,11 +919,11 @@ export default function Launch() {
                       <div className="row" style={{ gap: 5, marginTop: 5 }}>
                         <select value={j.stage} onChange={(e) => updateRow('launch_jobs', 'job_id', j.job_id,
                           { stage: e.target.value }).then(q.reload)}
-                          style={{ padding: '3px 6px', fontSize: 11.5, borderRadius: 5, border: '1px solid var(--line)' }}>
+                          className="mini">
                           {STAGES.map((s) => <option key={s}>{s}</option>)}</select>
                         <select value={j.status} onChange={(e) => updateRow('launch_jobs', 'job_id', j.job_id,
                           { status: e.target.value }).then(q.reload)}
-                          style={{ padding: '3px 6px', fontSize: 11.5, borderRadius: 5, border: '1px solid var(--line)' }}>
+                          className="mini">
                           {STATUS.map((s) => <option key={s}>{s}</option>)}</select>
                       </div>
                     </div>))}

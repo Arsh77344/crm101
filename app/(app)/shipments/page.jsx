@@ -1,11 +1,17 @@
 'use client';
+import { useState } from 'react';
 import CrudPage from '@/components/CrudPage';
+import Shiprocket from '@/components/Shiprocket';
 import { money } from '@/components/ui';
 
 const STATUS = ['Not booked', 'Booked', 'Picked up', 'In transit', 'Out for delivery', 'Delivered', 'RTO', 'Lost'];
 
 export default function Shipments() {
+  // Booking a courier changes the table under it, so a booking bumps this.
+  const [stamp, setStamp] = useState(0);
   return <CrudPage cfg={{
+    refreshToken: stamp,
+    banner: <Shiprocket onChange={() => setStamp((n) => n + 1)} />,
     table: 'shipments', pk: 'shipment_id', title: 'Shipments', singular: 'shipment',
     select: '*,orders(order_number,contacts(full_name)),brands(name,city)',
     sub: (r) => `${r.filter((s) => !['Delivered', 'RTO', 'Lost'].includes(s.status)).length} in motion · ${r.length} total`,

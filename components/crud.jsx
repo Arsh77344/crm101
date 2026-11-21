@@ -37,7 +37,9 @@ export default function Crud({ cfg }) {
     const { data, error } = await query.limit(500);
     if (error) throw error;
     return data || [];
-  }, [filterValue]);
+    // A page can ask for a refetch without remounting: remounting would also
+    // tear down whatever the page put in the banner, losing what it was saying.
+  }, [filterValue, cfg.refreshToken]);
 
   const lookupDefs = (cfg.fields || []).filter((f) => f.lookup);
   const lookups = useQuery(async (c) => {
@@ -91,6 +93,9 @@ export default function Crud({ cfg }) {
         <button className="btn btn-primary" onClick={() => go('new')}>New {cfg.singular}</button>
       </>}>
       <ErrorNote error={main.error || err} />
+      {/* A page may put something of its own above the table — a courier panel,
+          a connection warning — without leaving the shared layout. */}
+      {cfg.banner}
 
       {cfg.sheet && sheetOpen && (
         <div style={{ marginBottom: 16 }}>

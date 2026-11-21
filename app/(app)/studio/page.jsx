@@ -5,6 +5,7 @@ import { useQuery, sb, insertRow, updateRow } from '@/lib/db';
 import { PROVIDERS, NO_KEYS, providerOption, firstWithKey, hasKey } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, money, when } from '@/components/ui';
 import Dictate from '@/components/Dictate';
+import { executeCampaign } from '@/lib/execute';
 
 async function agent(body) {
   const { data: { session } } = await sb().auth.getSession();
@@ -32,6 +33,9 @@ export default function Studio() {
   const [search, setSearch] = useState(true);
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
+  const [step, setStep] = useState('');
+  const [ran, setRan] = useState(null);
+  const [perPost, setPerPost] = useState(2);
   const [keys, setKeys] = useState(null);
   const endRef = useRef(null);
 
@@ -124,18 +128,32 @@ export default function Studio() {
           cta: x.cta || null, placement: x.placement || null,
         };
       });
+      let saved = [];
       if (posts.length) {
-        const { error } = await sb().from('campaign_posts').insert(posts);
+        const { data, error } = await sb().from('campaign_posts').insert(posts).select();
         if (error) throw error;
+        saved = data || [];
       }
       await updateRow('campaign_threads', 'thread_id', thread.thread_id,
         { status: 'Approved', campaign_id: campaign.campaign_id });
       await q.reload();
+
+      // Everything the CRM can do on its own. Meta is where it stops.
+      setBusy('executing');
+      const withIds = {
+        ...proposal,
+        posts: (proposal.posts || []).map((x, i) => ({ ...x, post_id: saved[i]?.post_id || null })),
+      };
+      const result = await executeCampaign({
+        proposal: withIds, campaign, thread, perPost, onStep: setStep,
+      });
+      setRan(result); setStep('');
     } catch (e) { setErr(e.message || String(e)); }
-    setBusy('');
+    setBusy(''); setStep('');
   }
 
   const ready = keys && hasKey(keys, provider);
+  const pieces = new Set((proposal?.posts || []).map((x) => x.product_id).filter(Boolean)).size;
 
   return (
     <Page title="Campaign studio"
@@ -153,7 +171,7 @@ export default function Studio() {
           true to work from.
         </div>)}
 
-      <div className="grid" style={{ gridTemplateColumns: '220px 1fr 380px', gap: 14 }}>
+      <div className="grid studio-grid" style={{ gridTemplateColumns: '220px 1fr 380px', gap: 14 }}>
         <div className="card">
           <div className="card-head"><h3>Campaigns</h3></div>
           <div className="card-body" style={{ padding: 8 }}>
@@ -274,11 +292,42 @@ export default function Studio() {
                   <div className="small"><strong>Who it is for:</strong> {proposal.audience_note}</div>
                   <div className="small"><strong>Art direction:</strong> {proposal.art_direction}</div>
                   {thread?.status !== 'Approved' && (
-                    <button className="btn btn-primary btn-sm" onClick={approve}
-                      disabled={Boolean(busy)}>
-                      {busy === 'approve' ? 'Saving…'
-                        : `Approve — write ${(proposal.posts || []).length} posts to the calendar`}
-                    </button>)}
+                    <>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Creatives per post</label>
+                        <select value={perPost} style={{ width: 90 }}
+                          onChange={(e) => setPerPost(Number(e.target.value))}>
+                          {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <span className="hint">
+                          {pieces === 0
+                            ? 'No post names a piece from the catalogue, so none can be generated.'
+                            : `${perPost * pieces} image${perPost * pieces === 1 ? '' : 's'} across `
+                              + `${pieces} piece${pieces === 1 ? '' : 's'}. This is the part that costs.`}
+                        </span>
+                      </div>
+                      <button className="btn btn-primary btn-sm" onClick={approve}
+                        disabled={Boolean(busy)}>
+                        {busy === 'approve' ? 'Saving…' : busy === 'executing' ? 'Building it…'
+                          : 'Approve and build it'}
+                      </button>
+                      <div className="small faint">
+                        Writes the campaign and {(proposal.posts || []).length} posts, groups the
+                        pieces into a collection, makes the tracked links, raises the tasks and
+                        generates the creatives. It stops at Meta.
+                      </div>
+                    </>)}
+                  {busy === 'executing' && step && (
+                    <div className="note small"><strong>{step}</strong></div>)}
+                  {ran && (
+                    <div className={`note small ${ran.trouble.length ? 'warn' : 'good'}`}>
+                      <strong>{ran.trouble.length ? 'Built, with some gaps.' : 'Built.'}</strong>
+                      <ul>
+                        {ran.done.map((d) => <li key={d}>{d}</li>)}
+                        {ran.trouble.map((t) => <li key={t}><strong>{t}</strong></li>)}
+                      </ul>
+                      Nothing was sent to Meta or posted anywhere.
+                    </div>)}
                 </div>
               </div>
 
