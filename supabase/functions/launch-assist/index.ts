@@ -171,14 +171,25 @@ Return only JSON:
             "day_offset": number, "product": string}]}
 "title" is the shot direction. "body" is the caption. "day_offset" counts days from the start, from 0.`;
 
-const LOOK_RULES = `You are a photographer breaking down one reference photograph so a similar
-shot could be directed from your notes alone, without seeing it again.
+const LOOK_RULES = (known: string[]) => `You are a photographer breaking down one reference
+photograph so a similar shot could be directed from your notes alone, without seeing it again.
 Describe only what is in the frame. Do not guess a brand, a location name, or a person's identity,
 and never describe the identity or face of the person in it beyond what a casting note would say.
 Return only JSON:
 {"framing": string, "subject": string, "pose": string, "setting": string,
  "light": string, "palette": string, "mood": string, "avoid": string,
- "name": string, "summary": string}
+ "name": string, "summary": string, "category": string}
+"category" is what kind of reference this is, in two or three words, so a growing library can be
+sorted by it. Judge it by what the photograph is useful FOR, not by what happens to be in it: a
+room photographed for its wall and light is a location reference even if someone is standing in it.
+${known.length
+  ? `These categories are already in use in this library:\n${known.map((c) => `- ${c}`).join("\n")}
+Reuse one of them word for word whenever it fits, even loosely. Coin a new one only when none of
+them could reasonably cover this photograph, because two names for one idea make the library
+impossible to sort.`
+  : `Nothing is categorised yet, so choose a plain, reusable name that would still make sense as
+the hundredth reference in the library — the kind of word a photographer would use for a whole
+shelf of references, not a description of this one picture.`}
 "framing" is shot length, orientation and where the subject sits in frame.
 "pose" is body, arms, head and gaze.
 "setting" is the kind of place and what is behind the subject, not a named place.
@@ -708,7 +719,12 @@ Deno.serve(async (req) => {
 
     if (action === "look") {
       if (!p.reference_url) return json({ error: "Give the reference image first." }, 400);
-      out = await ask(provider, LOOK_RULES, "Break this reference down.", [p.reference_url], false);
+      const seen = await admin.from("looks").select("category")
+        .not("category", "is", null).limit(300);
+      const known = [...new Set((seen.data ?? [])
+        .map((r: any) => String(r.category ?? "").trim()).filter(Boolean))].sort();
+      out = await ask(provider, LOOK_RULES(known), "Break this reference down.",
+                      [p.reference_url], false);
       if (runId) {
         await admin.from("ai_runs").update({ status: "Done", model: out.model, response: out.data })
           .eq("run_id", runId);
@@ -719,6 +735,7 @@ Deno.serve(async (req) => {
           framing: d.framing ?? null, subject: d.subject ?? null, pose: d.pose ?? null,
           setting: d.setting ?? null, light: d.light ?? null, palette: d.palette ?? null,
           mood: d.mood ?? null, avoid: d.avoid ?? null, status: "Ready",
+          category: String(d.category ?? "").trim().slice(0, 40) || null,
         }).eq("look_id", p.look_id);
       }
       return json({ ok: true, provider, model: out.model, result: out.data });
