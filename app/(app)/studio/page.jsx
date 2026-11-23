@@ -31,6 +31,9 @@ export default function Studio() {
   const [mode, setMode] = useState('Quick');
   const [provider, setProvider] = useState('gemini');
   const [search, setSearch] = useState(true);
+  // The market the campaign is for. It changes the copy, the language and the
+  // casting more than anything else, so it is asked for up front.
+  const [market, setMarket] = useState('');
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [step, setStep] = useState('');
@@ -65,12 +68,14 @@ export default function Studio() {
 
   const messages = m.data?.messages || [];
   const proposal = thread?.proposal || null;
+  // A thread carries its own market once set; the box follows it.
+  const marketOf = thread?.market ?? '';
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); },
     [messages.length, busy]);
 
-  async function send() {
-    const text = draft.trim();
+  async function send(said) {
+    const text = String(said ?? draft).trim();
     if (!text || busy) return;
     setBusy('thinking'); setErr(''); setDraft('');
     try {
@@ -78,6 +83,7 @@ export default function Studio() {
       if (!id) {
         const t = await insertRow('campaign_threads', {
           title: text.slice(0, 60), mode, objective: text.slice(0, 200),
+          market: market || null,
         });
         id = t.thread_id; setSel(id); await q.reload();
       }
@@ -86,14 +92,17 @@ export default function Studio() {
       const history = [...messages.map((x) => ({ role: x.role, body: x.body })),
                        { role: 'owner', body: text }];
       const out = await agent({ action: 'reply', provider, mode, search,
-                               thread_id: id, messages: history });
+                               thread_id: id, market, messages: history });
       await insertRow('campaign_messages', {
         thread_id: id, role: 'agent', body: [out.say, out.ask].filter(Boolean).join('\n\n'),
         proposal: out.proposal || null, model: out.model,
       });
       await updateRow('campaign_threads', 'thread_id', id, {
-        proposal: out.proposal || thread?.proposal || null,
-        mode, updated_at: new Date().toISOString(),
+        proposal: out.proposal
+          ? { ...out.proposal, options: out.options || [] }
+          : thread?.proposal || null,
+        mode, market: market || thread?.market || null,
+        updated_at: new Date().toISOString(),
         ...(out.proposal?.campaign_name ? { title: out.proposal.campaign_name } : {}),
       });
       await Promise.all([m.reload(), q.reload()]);
@@ -238,6 +247,16 @@ export default function Studio() {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
               }} />
             <Dictate onText={(f) => setDraft((cur) => f(cur))} label="Say it instead" />
+            <div className="field" style={{ marginBottom: 9 }}>
+              <label>Which market is this for</label>
+              <input value={market || marketOf} placeholder="South India · Tamil Nadu · Gulf NRI · all of India"
+                onChange={(e) => setMarket(e.target.value)} />
+              <span className="hint">
+                The single thing that most changes a campaign: the festival it is timed to, the
+                language the copy is written in, and who is cast in the pictures. Leave it empty
+                and it will ask.
+              </span>
+            </div>
             <div className="row wrap" style={{ gap: 7 }}>
               {MODES.map(([k, label, blurb]) => (
                 <button key={k} className={`chip ${mode === k ? 'on' : ''}`} title={blurb}
@@ -254,7 +273,7 @@ export default function Studio() {
                   <option key={k} value={k}>{providerOption(k, keys)}</option>))}
               </select>
               <span className="spacer" />
-              <button className="btn btn-primary btn-sm" onClick={send}
+              <button className="btn btn-primary btn-sm" onClick={() => send()}
                 disabled={!draft.trim() || Boolean(busy) || !ready}>
                 {busy === 'thinking' ? 'Working…' : 'Send'}</button>
             </div>
@@ -276,6 +295,34 @@ export default function Studio() {
                   hint="The campaign appears here as soon as the agent has one." />
               </div></div>
             : <>
+              {(proposal.options || []).length > 1 && (
+                <div className="card" style={{ marginBottom: 14 }}>
+                  <div className="card-head"><h3>Directions it considered</h3>
+                    <span className="small muted">{proposal.options.length}</span></div>
+                  <div className="card-body stack" style={{ gap: 9 }}>
+                    {proposal.options.map((o, i) => (
+                      <div key={i} className={`group-card${o.recommended ? ' on' : ''}`}
+                        style={{ padding: '9px 11px', borderRadius: 8,
+                                 border: '1px solid var(--line)' }}>
+                        <div className="row wrap" style={{ gap: 6 }}>
+                          <strong className="small">{o.name}</strong>
+                          {o.recommended && <span className="badge b-green">Its pick</span>}
+                        </div>
+                        {o.spine && <div className="small" style={{ marginTop: 3 }}>{o.spine}</div>}
+                        {o.why && <div className="small muted" style={{ marginTop: 3 }}>{o.why}</div>}
+                        {o.trade_off && (
+                          <div className="small faint" style={{ marginTop: 3 }}>
+                            Costs: {o.trade_off}</div>)}
+                        {!o.recommended && thread?.status !== 'Approved' && (
+                          <button className="btn btn-sm" style={{ marginTop: 7 }}
+                            disabled={Boolean(busy)}
+                            onClick={() => send(`Build "${o.name}" instead. `
+                              + `Keep everything else you can.`)}>
+                            Build this one instead</button>)}
+                      </div>))}
+                  </div>
+                </div>)}
+
               <div className="card">
                 <div className="card-head"><h3>The campaign</h3>
                   <Badge>{thread?.status}</Badge></div>
@@ -291,6 +338,14 @@ export default function Studio() {
                   {proposal.offer && <div className="small"><strong>Offer:</strong> {proposal.offer}</div>}
                   <div className="small"><strong>Who it is for:</strong> {proposal.audience_note}</div>
                   <div className="small"><strong>Art direction:</strong> {proposal.art_direction}</div>
+                  {proposal.casting && (
+                    <div className="small"><strong>Casting:</strong> {proposal.casting}</div>)}
+                  {(proposal.pieces || []).length > 0 && (
+                    <div className="small">
+                      <strong>Pieces it sells:</strong>{' '}
+                      {proposal.pieces.filter((x) => x.imagery !== 'ready').length} of{' '}
+                      {proposal.pieces.length} still need a shoot
+                    </div>)}
                   {thread?.status !== 'Approved' && (
                     <>
                       <div className="field" style={{ marginBottom: 0 }}>

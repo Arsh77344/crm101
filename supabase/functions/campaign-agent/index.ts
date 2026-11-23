@@ -71,7 +71,9 @@ async function workspace(admin: any) {
   const [products, collections, looks, past, orders] = await Promise.all([
     admin.from("products")
       .select("product_id,public_product_name,category,fabric,colour,weave_or_motif,retail_price,"
-        + "stock_qty,status,product_images(image_id,generated,shot_angle,is_primary)")
+        + "stock_qty,status,story,description,"
+        + "product_images(image_id,generated,shot_angle,is_primary),"
+        + "brands(name,city,story)")
       .eq("status", "Published").order("created_at", { ascending: false }).limit(40),
     admin.from("collections").select("collection_id,name,kind,description,status").limit(20),
     admin.from("looks").select("look_id,look_no,name,summary,source,use_for,status")
@@ -109,7 +111,13 @@ function catalogueLines(w: any) {
   const pieces = w.products.slice(0, 25).map((x: any) =>
     `- ${x.public_product_name} · ${[x.category, x.colour, x.fabric, x.weave_or_motif].filter(Boolean).join(", ")}`
     + ` · ${x.retail_price ?? "unpriced"} · ${x.stock_qty ?? 0} in stock`
-    + ` · imagery: ${imageryOf(x)} [id ${x.product_id}]`).join("\n");
+    + ` · imagery: ${imageryOf(x)} [id ${x.product_id}]`
+    + (x.story ? `\n    its story (recorded, true): ${x.story}` : `\n    its story: NOT RECORDED`)
+    + (x.brands?.story
+        ? `\n    the workshop that made it: ${x.brands.name}${x.brands.city ? ` in ${x.brands.city}` : ""} — ${x.brands.story}`
+        : x.brands?.name
+          ? `\n    the workshop that made it: ${x.brands.name}${x.brands.city ? ` in ${x.brands.city}` : ""}, no story recorded`
+          : "")).join("\n");
   const looks = w.looks.map((l: any) =>
     `- #${l.look_no} ${l.name}: ${l.summary ?? "no description"} (${l.source === "Own" ? "ours, may follow closely" : "found, direction only"}) [id ${l.look_id}]`).join("\n");
   const past = w.past.map((c: any) =>
@@ -137,6 +145,10 @@ const SHAPE = `{
   "say": string,
   "ask": string | null,
   "ready": boolean,
+  "options": [{
+    "name": string, "spine": string, "why": string,
+    "trade_off": string, "recommended": boolean
+  }],
   "proposal": null | {
     "campaign_name": string,
     "objective": string,
@@ -201,6 +213,69 @@ Everything you write is for a buyer there, and a campaign that could run anywher
 copy or casting, because both change completely with it — it is the single thing that most changes
 this campaign.`;
 
+// What the brand actually sells. Written after looking at how the houses that
+// do this well actually do it — Hermes makes the making itself the primary
+// story and demonstrates the skill in public; Loro Piana explains the material
+// and its provenance and puts the people who produce it on the page; both treat
+// the channel as education rather than promotion, and neither discounts.
+//
+// The thing to avoid is the salesman's version: "took 100 hours". A duration is
+// the floor of this, not the story. What the motif DEPICTS and what it has
+// MEANT is the story, and in this craft that material is unusually rich.
+const STORY = `WHAT THIS BRAND SELLS. Not an object, and not a number of hours. A buyer at this
+price is buying meaning, and this craft has more of it than almost any other. Your job is to find
+the specific, strange, true thing in the piece in front of you and build the campaign on that.
+
+WHERE THE STORY COMES FROM, best first:
+
+1. WHAT THE MOTIF DEPICTS AND HAS MEANT. This is the richest seam and it is usually ignored. A
+   shikargah is a hunting ground — riders, deer mid-leap, tigers, parrots, woven into dense
+   foliage, a whole forest in silk, and a motif that came into this tradition through Persia and
+   the Mughal court. A jangla is a jungle: endless creeping vine, read as abundance and growth
+   without end. A kairi is the mango-paisley, Persian in origin, read as fertility and life. A
+   booti is a single blossom scattered across the field like a star. The naqsha is the hand-drawn
+   graph the whole saree is woven from, made before a single thread is thrown.
+   A buyer who learns that the thing she is wearing is a hunting forest, and that someone drew it
+   on graph paper first, is a buyer who has been given something. START HERE.
+2. WHAT IT IS WORN FOR. The occasion, the ritual, who gives it to whom, what it marks. A piece
+   bought for a wedding, a first Diwali in a new house, a daughter's convocation is doing a job in
+   someone's life, and the campaign can speak to that job.
+3. THE PEOPLE AND THE PLACE. Varanasi, the lanes, the room-sized foot-powered loom inside the
+   weaver's own house, the craft passing father to son, the families who hold a technique. Write
+   them as skilled professionals the brand buys from — never "artisan" as decoration, never
+   poverty framing, never saviour framing.
+4. THE DIFFICULTY, AND ONLY THEN THE TIME. Kadhua, where each motif is woven and tied off
+   individually rather than floated across the back, is genuinely harder and genuinely rarer, and
+   THAT is why it takes what it takes. Lead with what makes it difficult; let the duration land
+   afterwards as evidence. A duration on its own is what every seller on every marketplace says.
+
+HOW TO WRITE IT:
+
+- ONE STORY ACROSS THE CAMPAIGN. Decide what this campaign is about and let each post carry a
+  different part of it, in an order that builds. Say what the spine is in "brief". Six posts about
+  the same saree is not a campaign.
+- TEACH SOMETHING IN EVERY POST. The channel is education, not promotion. If a post teaches the
+  reader nothing she did not know, it is filler. A reader who learns to read a border, tell kadhua
+  from a cutwork copy, or name what is woven into her own saree will remember who taught her.
+- MOTIF LORE IS GENERAL KNOWLEDGE AND YOU MAY USE IT. What a shikargah is, where the paisley came
+  from, what a naqsha does, how kadhua differs from fekua — these are facts about the tradition,
+  not claims about this piece, and you may write them even when the piece's own story is not
+  recorded. Where you are unsure of a point of lore, leave it out or say in "say" that it needs
+  checking.
+- WHAT IS SPECIFIC TO THIS PIECE MUST BE RECORDED. Every piece above either carries its story or
+  says NOT RECORDED. You may never invent: a count of days or hours, a weaver's or family's name,
+  a number of generations, a village, an age of a tradition, a GI claim, or "the last family who
+  still...". Where you want that and it is not recorded, ask the owner for it in "say".
+- BANNED WORDS in the copy, because they are what a brand writes when it has nothing true to say:
+  exquisite, timeless, elegant, luxurious, heirloom, masterpiece, curated, handcrafted with love,
+  epitome, unparalleled, regal, royal elegance.
+- RESTRAINT IS THE REGISTER. No urgency, no countdowns, no "don't miss out", no emoji, no
+  exclamation marks, no stacked hashtags. State an offer plainly once and let it sit. Never
+  apologise for the price and never justify it with a discount: justify it with the work. Scarcity
+  here is the scarcity of the skill, not a fake shortage of stock.
+- OLD STORY, PRESENT TENSE. The heritage is the material, not the tone. Write it for someone
+  scrolling now, not as a museum label.`;
+
 const RULES = (brand: string, mode: string, catalogue: string, search: boolean,
                market: string) => `${brand}
 
@@ -216,7 +291,17 @@ what a competitor spends — say plainly that you do not have it and either ask 
 assumption inside your own text.
 
 ${catalogue}
+
+${STORY}
 ${marketBlock(market)}
+
+REVISING, NOT REDRAFTING. If a proposal has already been put to the owner in this conversation
+and they are now asking for a change, change ONLY what they asked for and return everything else
+exactly as it was — the same name, the same dates, the same posts, the same ad sets, word for word,
+unless the change they asked for genuinely forces one of them to move. Say in one line in "say"
+what you changed and what moved with it. Re-deciding the whole campaign because one line was
+questioned loses the owner the work they already approved, and is the most annoying thing you
+could do. Keep "options" as they were unless the change makes one of them wrong.
 
 HOW YOU WORK THIS TURN: ${mode === "Interview"
   ? `Take the brief properly. Ask for ONE missing thing at a time, the one that most changes the
@@ -233,9 +318,17 @@ ${SHAPE}
 
 "say" is what you tell the owner: a few sentences, plain. When you are proposing, say what the
 campaign does and the two or three judgements you made, not a summary of the fields below.
-"posts" are organic posts, 4 to 8 of them, each a different idea — detail, making, styling, the
-offer, a customer-facing question. "day_offset" counts days from the start, from 0. "product_id"
-must be one of the ids above or null.
+"options" is two or three genuinely different directions this campaign could take — different
+stories, not the same story with different words. "spine" is the one-line story each is built on.
+"why" is what makes it worth doing. "trade_off" is what it costs or risks, honestly: the one that
+needs four new shoots says so, the one that leans on a tradition you are unsure of says so. Mark
+exactly one "recommended" and say in "say" which you picked and why in one line. Then build THAT
+one out in full in "proposal". The owner can ask for a different one, and then you build that
+instead, keeping everything they have already approved.
+"posts" are organic posts, 4 to 8 of them. Each carries a different part of the one story — the
+material, the making, a detail worth looking at closely, the person who made it, how it is worn,
+the offer — in an order that builds rather than repeats. "day_offset" counts days from the start,
+from 0. "product_id" must be one of the ids above or null.
 "art_direction" on a post is the shot: what is in frame and how, in one or two lines, consistent
 with the campaign's own art direction.
 "pieces" is the 6 to 10 pieces this campaign actually sells, chosen from the catalogue above —
@@ -479,6 +572,25 @@ Deno.serve(async (req) => {
     // The ids the model hands back have to be real, or approval writes rubbish.
     const known = new Set(w.products.map((x: any) => x.product_id));
     const knownLooks = new Set(w.looks.map((x: any) => x.look_id));
+    // Exactly one option is the recommendation: more than one, or none, and the
+    // owner has nothing to decide from.
+    if (Array.isArray(d.options) && d.options.length) {
+      const all = d.options.filter(Boolean);
+      // Trimming must never throw away the one it actually recommended, so the
+      // recommendation leads and the rest follow in the order given.
+      const pick = all.findIndex((o: any) => o?.recommended);
+      const ordered = pick > 0 ? [all[pick], ...all.filter((_, i) => i !== pick)] : all;
+      d.options = ordered.slice(0, 4);
+      if (!d.options.some((o: any) => o?.recommended)) d.options[0].recommended = true;
+      let seen = false;
+      for (const o of d.options) {
+        if (o?.recommended && seen) o.recommended = false;
+        if (o?.recommended) seen = true;
+      }
+    } else {
+      d.options = [];
+    }
+
     if (d.proposal) {
       d.proposal.market = market || null;
       if (Array.isArray(d.proposal.pieces)) {

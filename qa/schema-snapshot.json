@@ -96,7 +96,8 @@
    "pickup_state",
    "pickup_pincode",
    "pickup_country",
-   "pickup_registered_at"
+   "pickup_registered_at",
+   "story"
   ],
   "broadcast_recipients": [
    "broadcast_id",
@@ -648,7 +649,8 @@
    "published_at",
    "created_at",
    "brand_id",
-   "availability"
+   "availability",
+   "story"
   ],
   "profiles": [
    "id",
