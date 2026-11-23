@@ -392,7 +392,7 @@ export default function Studio() {
                     </div>)}
                   {(proposal.six_cs || []).length > 0 && (
                     <div data-six-cs>
-                      <div className="small"><strong>Its own check, the six C\u2019s:</strong></div>
+                      <div className="small"><strong>Its own check, the six C’s:</strong></div>
                       <div className="row wrap" style={{ gap: 5, marginTop: 5 }}>
                         {proposal.six_cs.map((x, i) => (
                           <span key={i}

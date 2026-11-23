@@ -3,7 +3,9 @@ import CrudPage from '@/components/CrudPage';
 import { runUp, spanLabel } from '@/lib/occasions';
 
 const KINDS = ['Festival', 'Wedding season', 'Retail moment', 'Brand moment'];
-const BADGE = { on: 'b-green', soon: 'b-amber', later: '', past: '', none: 'b-red' };
+// Tones follow the shared TONE map in components/ui.jsx: a not-yet state
+// carries no tone there, and b-red is kept for things that actually failed.
+const BADGE = { on: 'b-green', soon: 'b-amber', later: '', past: '', none: '' };
 
 export default function Occasions() {
   return <CrudPage cfg={{
@@ -86,7 +88,7 @@ export default function Occasions() {
         hint: 'The thing that would make the campaign land badly. A bridal pitch aimed into Aadi is the clearest example: weddings are deliberately avoided in that month.' },
       { name: 'note', label: 'Note', type: 'textarea', section: 'Admin' },
       { name: 'active', label: 'On the calendar', options: ['true', 'false'],
-        hint: 'Turn an occasion off rather than deleting it, so last year’s campaigns keep their link to it.' },
+        hint: 'Turn an occasion off rather than deleting it, so last year\u2019s campaigns keep their link to it.' },
     ],
   }} />;
 }
