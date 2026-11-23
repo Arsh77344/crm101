@@ -10,7 +10,7 @@ import Sheet from '@/components/Sheet';
 import { PRODUCT_SHEET } from '@/lib/schemas';
 import { useLightbox } from '@/components/Lightbox';
 import Dictate from '@/components/Dictate';
-import { partFromName, partGaps, PART_OPTIONS } from '@/lib/parts';
+import { partFromName, partGaps, partOptions, kindFor } from '@/lib/parts';
 
 const STEPS = ['Photos', 'The piece', 'Imagery', 'Words & price', 'Review'];
 const STAGES = ['Photos', 'Imagery', 'Copy', 'Pricing', 'Review', 'Published'];
@@ -187,8 +187,18 @@ export default function Launch() {
     const propFrom = Math.floor(Math.random() * 6);
     if (!imagery.set_id && setId) setImagery((im) => ({ ...im, set_id: setId }));
     setThinking('images'); setErr('');
+    // One shoot, so one scene. The editorial frame is rendered first and then
+    // handed to every later frame as a photograph, which is what makes the ghat
+    // in the close-up the same ghat as in the model shot. Without a scene to
+    // share — a plain studio set, or a white cut-out run — nothing is anchored
+    // and the frames are independent, as before.
+    const order = [...wanted].sort((a, b) =>
+      (a === 'Editorial' ? -1 : 0) - (b === 'Editorial' ? -1 : 0));
+    const chain = matchLook || wanted.includes('Editorial');
+    let anchorUrl = null;
+
     const trouble = [];
-    for (const mode of wanted) {
+    for (const mode of order) {
       try {
         const out = await assist({
           action: 'images', provider: 'gemini', mode, count: runCounts[mode],
@@ -196,8 +206,10 @@ export default function Launch() {
           set_id: mode === 'Editorial' ? null : setId,
           cutout_on_white: imagery.cutout_on_white, check: imagery.check, prop_from: propFrom,
           tweak: imagery.tweak, piece,
+          anchor_url: chain ? anchorUrl : null,
           images: shots.map((s) => s.url), parts: shots.map((s) => s.part || 'Unlabelled'),
         });
+        if (chain && !anchorUrl && out.anchor_url) anchorUrl = out.anchor_url;
         setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
         (out.failed || []).forEach((f) => trouble.push(`${mode}: ${f}`));
       } catch (e2) {
@@ -260,7 +272,7 @@ export default function Launch() {
     try {
       for (const f of files) {
         const up = await uploadImage(f, 'inbox');
-        setShots((s) => [...s, { ...up, part: partFromName(f.name) }]);
+        setShots((s) => [...s, { ...up, part: partFromName(f.name, piece) }]);
       }
     } catch (e2) { setErr(e2.message || String(e2)); }
     setUploading(false);
@@ -432,14 +444,14 @@ export default function Launch() {
                           <select value={sh.part || 'Unlabelled'} style={{ marginTop: 5, width: '100%' }}
                             onChange={(e) => setShots((xs) => xs.map((x) =>
                               x.path === sh.path ? { ...x, part: e.target.value } : x))}>
-                            {[...new Set([...PART_OPTIONS, sh.part || 'Unlabelled'])].map((o) => (
+                            {[...new Set([...partOptions(piece), sh.part || 'Unlabelled'])].map((o) => (
                               <option key={o} value={o}>{o}</option>))}
                           </select>
                         </div>))}
                     </div>
 
                     {(() => {
-                      const holes = partGaps(shots.map((x) => x.part || 'Unlabelled'));
+                      const holes = partGaps(shots.map((x) => x.part || 'Unlabelled'), piece);
                       return holes.length === 0
                         ? (
                           <div className="note plain small" style={{ marginTop: 12 }}>

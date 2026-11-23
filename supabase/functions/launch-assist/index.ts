@@ -44,8 +44,164 @@ const PROVIDERS = ["openai", "gemini", "anthropic", "groq", "nvidia"];
 
 // A supplier usually sends crops, not a whole garment: the pallu in one frame, the
 // border in another, a macro of the field. Up to this many go to the model in one
-// call, in the order the owner uploaded them, each named by PART_MEANING below.
+// call, in the order the owner uploaded them, each named by its kind's part list.
 const MAX_SOURCES = 4;
+
+// What differs between the kinds of article the brand sells. Everything else in
+// this file is about photography and holds whatever is in front of the camera.
+// Sarees are what is sold today; the other entries are first drafts, written to
+// be corrected by someone who knows the article, not to be trusted as they are.
+// Adding a kind is adding an entry here.
+type Kind = {
+  whole: string;        // what one of them is called
+  parts: Record<string, string>;  // what a supplied photograph can be of
+  layout: string;       // the ordinary arrangement, when no photo shows the whole
+  copy: string[];       // what must be reproduced exactly
+  holder: string;       // what it is displayed on when nobody is wearing it
+  flat: string;         // how it lies for a flat study
+  angles: string[];     // the camera positions worth shooting
+  draft?: boolean;      // true where the vocabulary has not been checked by the owner
+};
+
+const KINDS: Record<string, Kind> = {
+  saree: {
+    whole: "saree",
+    parts: {
+      Overall: "the whole piece laid out or draped, so the proportions and the layout are visible",
+      Pallu: "the pallu \u2014 the decorated end that falls over the shoulder",
+      Border: "the border running along the edge",
+      Body: "the body or field of the piece, with its repeating motif",
+      Blouse: "the blouse piece that comes with it",
+      "Close-up": "a close macro of the weave, for texture and thread colour only, not proportion",
+      Draped: "the piece draped or worn, for shape",
+    },
+    layout: "the field carrying the repeating motif, the border along the edges, the pallu at one end",
+    copy: [
+      "the colour and its saturation, including how it shifts between the body and the border",
+      "the weave, the thread, the sheen and the texture at the scale the photographs show",
+      "the border: its width relative to the garment, its pattern, and where it runs",
+      "every motif: its shape, its size, its spacing and where it sits",
+      "the pallu: its pattern and how it differs from the body",
+      "anything that comes with it, such as a blouse piece, as photographed",
+    ],
+    holder: "a plain matte dress form in a single neutral colour, faceless and without hair, "
+      + "standing on its stand, the kind a shop uses",
+    flat: "unfolded along the surface and allowed to lie the way heavy silk lies, in a few soft "
+      + "natural folds rather than pressed flat, so its length reads across the frame and the "
+      + "border runs with it. Arrange it so three things are readable in one photograph: the "
+      + "field of the cloth, the border along its edge, and the pallu",
+    angles: [
+      "Straight on from the front, the whole piece square to camera.",
+      "Turned about forty-five degrees, so the drape and the side of the fall read as depth.",
+      "Full profile from the side, showing how it hangs along the body.",
+      "From behind, showing the back and the fall of the pallu.",
+      "A close frame on the border and the pallu, filling most of the image with the weave.",
+    ],
+  },
+  shawl: {
+    whole: "shawl",
+    draft: true,
+    parts: {
+      Overall: "the whole shawl opened out, so its proportions and layout are visible",
+      Border: "the border running along the edge",
+      Body: "the field of the shawl, with its ground and any repeating motif",
+      Palla: "the decorated end panel",
+      "Close-up": "a close macro of the weave or the embroidery, for texture only, not proportion",
+      Draped: "the shawl worn over the shoulders, for shape and fall",
+    },
+    layout: "the field carrying the ground and any motif, the border along the edges, "
+      + "the decorated panels at the ends",
+    copy: [
+      "the colour and its saturation, including how it shifts between the field and the border",
+      "the weave or embroidery, the thread, and the texture at the scale the photographs show",
+      "the border: its width relative to the shawl, its pattern, and where it runs",
+      "every motif: its shape, its size, its spacing and where it sits",
+      "the fringe or finish at the ends, exactly as photographed",
+    ],
+    holder: "a plain matte dress form in a single neutral colour, faceless and without hair, "
+      + "standing on its stand",
+    flat: "opened out on the surface with one corner turned back, so the field, the border and "
+      + "the end panel are all readable in one photograph",
+    angles: [
+      "Straight on, the whole shawl opened out and square to camera.",
+      "Turned about forty-five degrees, the fabric falling into soft folds.",
+      "Worn over the shoulders, three-quarter length, showing how it falls.",
+      "A close frame on the border and the end panel, filling most of the image.",
+    ],
+  },
+  jewellery: {
+    whole: "piece of jewellery",
+    draft: true,
+    parts: {
+      Overall: "the whole piece, so its proportions and how it sits are visible",
+      Detail: "a close frame on the setting, the stones or the metalwork",
+      Clasp: "the clasp, the hook or the fastening",
+      Reverse: "the back of the piece, showing the finish and any hallmark",
+      "Close-up": "a close macro of the surface, for metal colour and stone clarity only",
+      Worn: "the piece worn, for scale against a body",
+    },
+    layout: "the central element with whatever hangs or extends from it, in the proportion "
+      + "the photographs show",
+    copy: [
+      "the colour of the metal and its finish, polished, matte or oxidised",
+      "every stone: its colour, its cut, its size relative to the piece, and where it sits",
+      "the setting and the metalwork at the scale the photographs show",
+      "the length, the drop and the proportion of each element to the others",
+      "the clasp or fastening, as photographed",
+    ],
+    holder: "a plain neutral bust, stand or tray of the kind a jeweller uses, with nothing "
+      + "else on it",
+    flat: "laid on the surface and arranged so its full length and every element read at once, "
+      + "with any chain falling in a natural curve rather than pulled straight",
+    angles: [
+      "Straight on, the whole piece square to camera and lit to show the metal.",
+      "A close frame on the central element, filling most of the image.",
+      "Turned slightly, so the depth of the setting and the stones read.",
+      "Worn, three-quarter, for scale against a body.",
+    ],
+  },
+};
+
+// Anything the brand sells that has no entry yet. Deliberately plain: it says
+// what is true of every article and invents no vocabulary for one it does not
+// know, because a wrong part name is worse than no part name.
+const GENERIC: Kind = {
+  whole: "piece",
+  parts: {
+    Overall: "the whole piece, so its proportions and layout are visible",
+    Detail: "a close frame on one part of it",
+    "Close-up": "a close macro of the surface, for texture and colour only, not proportion",
+    Worn: "the piece worn or in use, for scale and shape",
+  },
+  layout: "the arrangement the photographs show, and no more than they show",
+  copy: [
+    "the colour and its saturation, and how it shifts across the piece",
+    "the material, its texture and its finish at the scale the photographs show",
+    "every pattern or decorative element: its shape, its size, its spacing and where it sits",
+    "the proportion of each part of the piece to the others",
+    "anything that comes with it, as photographed",
+  ],
+  holder: "a plain neutral stand or form of the kind a shop uses, with nothing else on it",
+  flat: "laid out on the surface so that as much of it as possible is readable in one photograph",
+  angles: [
+    "Straight on, the whole piece square to camera.",
+    "Turned about forty-five degrees, so its depth reads.",
+    "A close frame on its most distinctive part, filling most of the image.",
+    "From another side, showing what the first frame could not.",
+  ],
+};
+
+// Matched loosely on the owner's own category text, so "Banarasi Saree",
+// "Cotton Saree" and "saree" all land on the same entry.
+function kindOf(piece: any): Kind {
+  const hay = `${piece?.category ?? ""} ${piece?.fabric ?? ""}`.toLowerCase();
+  if (/saree|sari|lehenga|dupatta/.test(hay)) return KINDS.saree;
+  if (/shawl|stole|pashmina|wrap/.test(hay)) return KINDS.shawl;
+  if (/jewel|necklace|earring|bangle|bracelet|ring|jhumka|pendant|chain/.test(hay)) {
+    return KINDS.jewellery;
+  }
+  return GENERIC;
+}
 
 function parseJson(text: string): any {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -92,38 +248,30 @@ visible in the photographs.`;
 // What each supplied photograph is of, in the order they are attached. Without this
 // the model treats a macro of a border as the whole piece and the result is a saree
 // made entirely of border.
-const PART_MEANING: Record<string, string> = {
-  Overall: "the whole piece laid out or draped, so the proportions and the layout are visible",
-  Pallu: "the pallu — the decorated end that falls over the shoulder",
-  Border: "the border running along the edge",
-  Body: "the body or field of the piece, with its repeating motif",
-  Blouse: "the blouse piece that comes with it",
-  "Close-up": "a close macro of the weave, for texture and thread colour only, not proportion",
-  Draped: "the piece draped or worn, for shape",
-  Unlabelled: "an unlabelled photograph — work out which part of the piece it shows",
-};
+const UNLABELLED = "an unlabelled photograph — work out which part of the piece it shows";
 
-function partLines(parts: unknown, n: number) {
+function partLines(parts: unknown, n: number, kind: Kind) {
   const list = Array.isArray(parts) ? parts : [];
   const rows: string[] = [];
   for (let i = 0; i < n; i++) {
     const raw = String(list[i] ?? "Unlabelled").trim() || "Unlabelled";
     // A label may be combined, e.g. "Border + Body"; explain each half it knows.
     const notes = raw.split("+").map((x) => x.trim())
-      .map((x) => PART_MEANING[x]).filter(Boolean).join(", and ");
+      .map((x) => kind.parts[x] ?? (x === "Unlabelled" ? UNLABELLED : ""))
+      .filter(Boolean).join(", and ");
     rows.push(`Photograph ${i + 1}: ${raw}${notes ? ` — ${notes}` : ""}`);
   }
   return rows.join("\n");
 }
 
-function partsBlock(parts: unknown, n: number) {
+function partsBlock(parts: unknown, n: number, kind: Kind) {
   if (n <= 1) return "";
   const labels = (Array.isArray(parts) ? parts : []).slice(0, n)
     .map((x) => String(x ?? "").trim());
   const hasOverall = labels.some((x) => /overall|draped/i.test(x));
-  return `\n\nAll ${n} photographs are of ONE single piece, not ${n} different pieces. They are
+  return `\n\nAll ${n} photographs are of ONE single ${kind.whole}, not ${n} different pieces. They are
 different parts of it, shot separately:
-${partLines(parts, n)}
+${partLines(parts, n, kind)}
 
 Put them together into the one garment they came from. A photograph of the border tells you what
 the border looks like and nothing about the rest; a macro tells you the thread and the texture and
@@ -131,9 +279,8 @@ nothing about scale. Keep every part exactly as it was photographed, in the plac
 where that part belongs.${hasOverall
     ? ""
     : `\n\nNo photograph shows the whole piece, so its overall layout has to be inferred: assume the
-ordinary arrangement for this kind of garment — the field carrying the repeating motif, the border
-along the edges, the pallu at one end — and build it from the parts you were given. Do not invent a
-motif, a colour or a border that is in none of the photographs.`}`;
+ordinary arrangement for this kind of article — ${kind.layout} — and build it from the parts you
+were given. Do not invent a motif, a colour or a detail that is in none of the photographs.`}`;
 }
 
 const COPY_RULES = (b: string, hasMarket: boolean, tight: boolean) => `${b}
@@ -202,22 +349,18 @@ where. Lead with whatever makes this shot recognisable at a glance — the cigar
 boats — not with the mood or the lighting. For example: "Teal silk saree, seated on sandstone steps
 with a cigarette, carved doorway behind."`;
 
-const FIDELITY = `The photographs show one real garment that a customer will actually be sent, and
-they will hold this image against the parcel. Treat the garment as a thing to be copied, not designed.
+const FIDELITY = (kind: Kind) => `The photographs show one real ${kind.whole} that a customer will
+actually be sent, and they will hold this image against the parcel. Treat it as a thing to be
+copied, not designed.
 
 Copy exactly, from the photographs:
-- the colour and its saturation, including how it shifts between the body and the border
-- the weave, the thread, the sheen and the texture at the scale the photographs show
-- the border: its width relative to the garment, its pattern, and where it runs
-- every motif: its shape, its size, its spacing and where it sits
-- the pallu: its pattern and how it differs from the body
-- anything that comes with it, such as a blouse piece, as photographed
+${kind.copy.map((c) => `- ${c}`).join("\n")}
 
-Do not redraw a motif "in the same style", do not regularise spacing, do not tidy the pattern, do not
-enrich or simplify it, do not add or remove zari, embroidery or border detail, and do not shift the
-colour warmer, cooler or more saturated. Where a part of the garment is not in any photograph, leave
-it plain rather than inventing it. An invented detail makes this image useless, so when in doubt
-reproduce what is photographed and nothing more.
+Do not redraw a detail "in the same style", do not regularise spacing, do not tidy a pattern, do not
+enrich or simplify it, do not add or remove decoration, and do not shift the colour warmer, cooler
+or more saturated. Where a part of it is not in any photograph, leave it plain rather than inventing
+it. An invented detail makes this image useless, so when in doubt reproduce what is photographed and
+nothing more.
 No text, no watermark, no logo, no brand name anywhere in the image.`;
 
 // One run is one shoot. The owner's non-editorial shots share a set, so the
@@ -257,6 +400,29 @@ function lookSet(look: any) {
   return parts.length ? parts.join(", ") : "";
 }
 
+// Consistency across a run comes from a picture, not a paragraph. Once the
+// first frame exists it is attached to every later one, and this says what to
+// take from it. The distinction matters: the place comes from the anchor, the
+// garment always comes from the owner's own photographs, because the anchor is
+// itself generated and any drift in it must not be copied forward.
+function anchorBlock(mode: string) {
+  const change = mode === "Model"
+    ? `Keep the same woman, the same styling and the same hair as that frame. Change the camera, `
+      + `her position in the scene and her pose.`
+    : mode === "Mannequin"
+      ? `Put the dress form in that same place. There is no person in this frame.`
+      : `This frame is a still life: no person and no mannequin. Put the cloth down somewhere in `
+        + `that same place \u2014 on a step, a ledge, a wall, whatever that scene already has.`;
+  return `\n\nThe FINAL photograph attached is another frame from this same shoot, already taken. `
+    + `This frame must look like it was taken minutes later in the same place: the same location, `
+    + `the same wall, floor and props, the same palette, the same time of day. The light may shift `
+    + `a little and the camera may move, but a viewer putting the two side by side must see one `
+    + `shoot. ${change}\n\nTake the PLACE from that final photograph and the GARMENT from the `
+    + `owner's own photographs above it. If the garment in that final photograph differs at all `
+    + `from the owner's photographs, the owner's photographs are right and that one is wrong \u2014 `
+    + `never copy the garment from it.`;
+}
+
 function setBlock(line: string, mode: string, cutoutOnWhite: boolean, fromLook = false) {
   if (!line) return "";
   if (mode === "Clean" && cutoutOnWhite) {
@@ -288,34 +454,30 @@ function setBlock(line: string, mode: string, cutoutOnWhite: boolean, fromLook =
     + `the direction of the light.`;
 }
 
-const SHOT: Record<string, string> = {
-  Clean: `${FIDELITY}\nA styled studio still of the piece itself, no person and no mannequin:
-the whole garment in frame, arranged so its border and pallu are readable. Shot like a catalogue
-photographer would shoot it — one soft key light with a gentle falloff, a soft shadow under the
-cloth so it sits on the surface rather than floating, no harsh highlight on the silk.`,
-  Mannequin: `${FIDELITY}\nDraped on a real mannequin that is visibly there: a plain matte
-dress form in a single neutral colour, faceless and without hair, standing on its stand, the kind
-a shop uses. The garment is draped over that body and takes its shape from it — shoulder, waist and
-fall all supported. The fabric must not float, hover or hold a shape with nothing inside it, and
-there must be no empty gap where a body should be. Show the mannequin's stand. Full length in frame,
-soft lighting; the set described below decides where it stands.`,
-  Model: `${FIDELITY}\nWorn by a woman standing in a relaxed, natural pose, full length in frame,
-soft daylight. Unless the set described below says otherwise, put her against a plain neutral
-studio background. Keep the garment the subject of the photograph.`,
-  Fabric: `${FIDELITY}\nThe cloth itself, laid out and nobody wearing it: no person, no
-mannequin, no dress form. The saree is unfolded along the surface and allowed to lie the way heavy
-silk lies, in a few soft natural folds rather than pressed flat, so its length reads across the
-frame and the border runs with it. Arrange it so three things are readable in one photograph: the
-field of the cloth, the border along its edge, and the pallu. Shot slightly from above, the whole
-arrangement in frame, one soft key light raking low across the weave so the texture and any zari
-catch it, with a gentle shadow where the folds meet the surface. This is a fabric study, so the
-cloth fills most of the frame and the setting is only the ground it rests on.`,
-  Detail: `${FIDELITY}\nA close macro of the cloth, filling the frame: the border meeting the
-body, or the pallu, whichever the photographs show best. Close enough that the weave, the thread and
-the texture read clearly, with the fabric falling in soft folds over whatever it is resting on and
-a shallow depth of field so the far folds soften. One soft light raking across the weave, so the
-texture and any zari catch it. This frame exists to prove the cloth, so every thread of it must be
-what the photographs show.`,
+const SHOT = (kind: Kind): Record<string, string> => {
+  const F = FIDELITY(kind);
+  return {
+    Clean: `${F}\nA styled studio still of the ${kind.whole} itself, no person and no mannequin:
+the whole of it in frame, arranged so its most distinctive parts are readable. Shot like a catalogue
+photographer would shoot it — one soft key light with a gentle falloff, a soft shadow beneath it so
+it sits on the surface rather than floating, no harsh highlight.`,
+    Mannequin: `${F}\nDisplayed on ${kind.holder}, visibly there and standing on its stand. The
+piece is on that form and takes its shape from it, fully supported. It must not float, hover or hold
+a shape with nothing inside it, and there must be no empty gap where a body should be. Show the
+stand. Full length in frame, soft lighting; the set described below decides where it stands.`,
+    Model: `${F}\nWorn by a woman in a relaxed, natural pose, full length in frame, soft daylight.
+Unless the set or the casting note below says otherwise, put her against a plain neutral studio
+background. Keep the ${kind.whole} the subject of the photograph.`,
+    Fabric: `${F}\nThe ${kind.whole} itself, laid out and nobody wearing it: no person, no
+mannequin, no form. It is ${kind.flat}. Shot slightly from above, the whole arrangement in frame,
+one soft key light raking low across it so the texture catches, with a gentle shadow where it meets
+the surface. This is a study of the thing itself, so it fills most of the frame and the setting is
+only the ground it rests on.`,
+    Detail: `${F}\nA close macro filling the frame: whichever part the photographs show best. Close
+enough that the material, the making and the texture read clearly, with a shallow depth of field so
+the far side softens. One soft light raking across it, so the texture catches. This frame exists to
+prove what the thing is made of, so every part of it must be what the photographs show.`,
+  };
 };
 
 // Free-text direction from the owner, for this shoot only. It is fenced so it can
@@ -332,17 +494,9 @@ function tweakBlock(tweak: unknown) {
     + `anywhere in the image.`;
 }
 
-const ANGLES: string[] = [
-  "Straight on from the front, the whole piece square to camera.",
-  "Turned about forty-five degrees, so the drape and the side of the fall read as depth.",
-  "Full profile from the side, showing how it hangs along the body.",
-  "From behind, showing the back and the fall of the pallu.",
-  "A close frame on the border and the pallu, filling most of the image with the weave.",
-];
-
-function angleFor(i: number, given?: string[]) {
+function angleFor(i: number, given: string[] | undefined, kind: Kind) {
   if (given && given[i]) return given[i];
-  return ANGLES[i % ANGLES.length];
+  return kind.angles[i % kind.angles.length];
 }
 
 function lookBrief(look: any) {
@@ -370,11 +524,11 @@ const OWN_GUARD = `This reference is the brand's own photograph, so the shot may
 Still invent a different woman unless told otherwise.`;
 
 function editorialInstruction(look: any, angleLine: string, piece: any, first: boolean,
-                              tweak: unknown, parts: unknown, sourceCount: number) {
+                              tweak: unknown, parts: unknown, sourceCount: number, kind: Kind) {
   return [
-    FIDELITY,
-    partsBlock(parts, sourceCount), "",
-    "The garment above is the subject. Place it in a photograph built to this direction:",
+    FIDELITY(kind),
+    partsBlock(parts, sourceCount, kind), "",
+    `The ${kind.whole} above is the subject. Place it in a photograph built to this direction:`,
     lookBrief(look) || "No direction recorded for this look.", "",
     look.source === "Own" ? OWN_GUARD : FOUND_GUARD, "",
     first
@@ -628,11 +782,11 @@ spacing, detail that is not on the real piece, or detail on the real piece that 
 List each difference in one short plain sentence, naming the part. An empty list means it matches.
 Judge only what the photographs let you see; say "low" confidence rather than guessing.`;
 
-async function checkOne(sources: Inline[], made: Inline, parts: unknown) {
+async function checkOne(sources: Inline[], made: Inline, parts: unknown, kind: Kind) {
   const model = CHECK_MODEL;
-  const text = `These are photographs of one real garment.${partsBlock(parts, sources.length)}
+  const text = `These are photographs of one real ${kind.whole}.${partsBlock(parts, sources.length, kind)}
 
-The last photograph is the generated one. Does its garment match the real one?`;
+The last photograph is the generated one. Does the ${kind.whole} in it match the real one?`;
   const payload: any[] = [{ text }];
   [...sources, made].forEach((im) =>
     payload.push({ inline_data: { mime_type: im.mime, data: im.data } }));
@@ -708,6 +862,7 @@ Deno.serve(async (req) => {
                mode: p.mode ?? null, count: p.count ?? null, look_id: p.look_id ?? null,
                parts: Array.isArray(p.parts) ? p.parts.slice(0, MAX_SOURCES) : null,
                set_id: p.set_id ?? null, checked: p.check !== false,
+               anchored: Boolean(p.anchor_url),
                tweak: String(p.tweak ?? "").trim().slice(0, 700) || null,
                with_market: Boolean(p.research?.comparables?.length) },
   }).select("run_id").maybeSingle();
@@ -746,9 +901,13 @@ Deno.serve(async (req) => {
         return json({ error: "Generated imagery needs a Gemini key (GEMINI_API_KEY). ChatGPT, Claude, Groq and NVIDIA do not produce images." }, 400);
       }
       const mode = String(p.mode ?? "Clean");
+      // Which kind of article this is decides the part names, what must be
+      // copied, what it is displayed on and how it lies for a flat study.
+      const kind = kindOf(p.piece ?? {});
+      const shots = SHOT(kind);
       const wantCheck = p.check !== false;
       const editorial = mode === "Editorial";
-      if (!editorial && !SHOT[mode]) return json({ error: `Unknown imagery style "${mode}".` }, 400);
+      if (!editorial && !shots[mode]) return json({ error: `Unknown imagery style "${mode}".` }, 400);
       if (!images.length) return json({ error: "Upload at least one photo of the piece first." }, 400);
 
       // A look is loaded whenever one is named. An editorial run needs it; a
@@ -779,7 +938,17 @@ Deno.serve(async (req) => {
       const count = Math.max(1, Math.min(4, Number(p.count) || 1));
       const sources: Inline[] = [];
       for (const u of images.slice(0, MAX_SOURCES)) sources.push(await asInline(u));
-      const assemble = partsBlock(p.parts, sources.length);
+
+      // A frame from earlier in this same run. A white cut-out is deliberately
+      // not of the scene, so it never takes one.
+      const wantsAnchor = Boolean(p.anchor_url)
+        && !(mode === "Clean" && p.cutout_on_white !== false);
+      let anchor: Inline | null = null;
+      if (wantsAnchor) {
+        try { anchor = await asInline(String(p.anchor_url)); }
+        catch { anchor = null; }   // a missing anchor must not fail the frame
+      }
+      const assemble = partsBlock(p.parts, sources.length, kind);
       const folder = crypto.randomUUID();
       const made: any[] = [];
       const failed: string[] = [];
@@ -787,16 +956,16 @@ Deno.serve(async (req) => {
       if (editorial) {
         let firstShot: Inline | null = null;
         for (let i = 0; i < count; i++) {
-          const angle = angleFor(i, p.angles);
+          const angle = angleFor(i, p.angles, kind);
           try {
             const instruction = editorialInstruction(look, angle, p.piece,
                                                      i === 0 || !firstShot, p.tweak,
-                                                     p.parts, sources.length);
+                                                     p.parts, sources.length, kind);
             const withPrev = firstShot ? [...sources, firstShot] : sources;
             const img = await oneImage(instruction, withPrev);
             if (!firstShot) firstShot = { mime: img.mime, data: img.data };
             const verdict = wantCheck
-              ? await checkOne(sources, img, p.parts).catch((e) => ({
+              ? await checkOne(sources, img, p.parts, kind).catch((e) => ({
                   match: true, confidence: "unchecked",
                   differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`] }))
               : null;
@@ -815,7 +984,7 @@ Deno.serve(async (req) => {
       } else {
         const results = await Promise.allSettled(
           Array.from({ length: count }, (_, i) =>
-            oneImage(`${SHOT[mode]}${assemble}${scene}`
+            oneImage(`${shots[mode]}${assemble}${scene}${anchor ? anchorBlock(mode) : ""}`
               + ((mode === "Clean" && p.cutout_on_white !== false)
                 ? ""
                 : (mode === "Clean" || mode === "Detail" || mode === "Fabric")
@@ -832,9 +1001,10 @@ Deno.serve(async (req) => {
                         + `Whatever it rests on is plain and belongs to this set — bare wood, `
                         + `stone, cane or undyed linen, nothing patterned, nothing that competes `
                         + `with the cloth and nothing branded.`)
-                  : `\n\nCamera: ${angleFor(i, p.angles)}`)
+                  : `\n\nCamera: ${angleFor(i, p.angles, kind)}`)
               + `\n\nWhat the piece is:\n`
-              + (describe(p.piece ?? {}, "") || "Not described.") + tweakBlock(p.tweak), sources)));
+              + (describe(p.piece ?? {}, "") || "Not described.") + tweakBlock(p.tweak),
+              anchor ? [...sources, anchor] : sources)));
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
           if (r.status === "rejected") {
@@ -843,13 +1013,13 @@ Deno.serve(async (req) => {
           }
           try {
             const verdict = wantCheck
-              ? await checkOne(sources, r.value, p.parts).catch((e) => ({
+              ? await checkOne(sources, r.value, p.parts, kind).catch((e) => ({
                   match: true, confidence: "unchecked",
                   differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`] }))
               : null;
             made.push(await store(admin, folder, mode.toLowerCase(), i, r.value,
               { mode, shot_angle: mode === "Detail" ? "Close macro of the cloth"
-                        : angleFor(i, p.angles),
+                        : angleFor(i, p.angles, kind),
                 look_id: matchLook ? look.look_id : null,
                 look_name: matchLook ? look.name : null,
                 set_id: p.set_id ?? null, check: verdict }));
@@ -877,7 +1047,10 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("job_id", p.job_id);
       }
-      return json({ ok: true, provider: "gemini", model: IMAGE_MODEL, images: made, failed });
+      return json({ ok: true, provider: "gemini", model: IMAGE_MODEL, images: made, failed,
+                    // The first frame of this call, for the next call in the run to anchor to.
+                    anchor_url: made[0]?.url ?? null,
+                    anchored: Boolean(anchor) });
     }
 
     if (action === "copy") {
@@ -885,7 +1058,7 @@ Deno.serve(async (req) => {
       const seen = Math.min(images.length, MAX_SOURCES);
       const body = (describe(p.piece ?? {}, p.brief ?? "")
         || "Nothing typed in yet — read the photographs.")
-        + partsBlock(p.parts, seen) + market;
+        + partsBlock(p.parts, seen, kindOf(p.piece ?? {})) + market;
       out = await ask(provider, COPY_RULES(brand, Boolean(market), tight),
                       `The piece:\n${body}`, images, false);
     } else if (action === "price") {

@@ -5,6 +5,10 @@
 -- here are new, so there is no policy to drop and the drops are gone. Nothing
 -- in this file removes or rewrites anything that already exists.
 
+-- ALREADY APPLIED, on its own, as the `look_category` migration: the owner
+-- asked for the category directly and nothing else depends on the board tables,
+-- so it was split out rather than held behind them. Kept here, idempotent, so
+-- this file still reads as the whole change.
 -- What kind of reference this is, as the reader names it. Free text on purpose:
 -- the owner chose invented categories over a fixed list. The reader is handed
 -- the categories already in use and told to reuse one where it fits, so the

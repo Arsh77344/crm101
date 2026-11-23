@@ -180,7 +180,8 @@
    "campaign_id",
    "created_at",
    "updated_at",
-   "created_by"
+   "created_by",
+   "market"
   ],
   "campaigns": [
    "campaign_id",
@@ -199,7 +200,8 @@
    "thread_id",
    "art_direction",
    "audience_note",
-   "ad_plan"
+   "ad_plan",
+   "market"
   ],
   "carts": [
    "cart_id",
@@ -480,7 +482,8 @@
    "created_at",
    "created_by",
    "look_no",
-   "summary"
+   "summary",
+   "category"
   ],
   "marketing_permissions": [
    "permission_id",
@@ -862,5 +865,5 @@
   "tasks>products",
   "tasks>profiles"
  ],
- "taken_at": "2026-11-21"
+ "taken_at": "2026-11-23"
 }

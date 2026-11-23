@@ -70,7 +70,8 @@ async function brandContext(admin: any) {
 async function workspace(admin: any) {
   const [products, collections, looks, past, orders] = await Promise.all([
     admin.from("products")
-      .select("product_id,public_product_name,category,fabric,colour,weave_or_motif,retail_price,stock_qty,status")
+      .select("product_id,public_product_name,category,fabric,colour,weave_or_motif,retail_price,"
+        + "stock_qty,status,product_images(image_id,generated,shot_angle,is_primary)")
       .eq("status", "Published").order("created_at", { ascending: false }).limit(40),
     admin.from("collections").select("collection_id,name,kind,description,status").limit(20),
     admin.from("looks").select("look_id,look_no,name,summary,source,use_for,status")
@@ -92,10 +93,23 @@ async function workspace(admin: any) {
   };
 }
 
+function imageryOf(x: any) {
+  const shots = x.product_images ?? [];
+  if (!shots.length) return "no photographs at all";
+  const made = shots.filter((i: any) => i.generated).length;
+  const own = shots.length - made;
+  const parts = [
+    own ? `${own} of the owner's own` : "",
+    made ? `${made} generated` : "",
+  ].filter(Boolean).join(", ");
+  return `${shots.length} image${shots.length === 1 ? "" : "s"} (${parts})`;
+}
+
 function catalogueLines(w: any) {
   const pieces = w.products.slice(0, 25).map((x: any) =>
-    `- ${x.public_product_name} · ${[x.colour, x.fabric, x.weave_or_motif].filter(Boolean).join(", ")}`
-    + ` · ${x.retail_price ?? "unpriced"} · ${x.stock_qty ?? 0} in stock [id ${x.product_id}]`).join("\n");
+    `- ${x.public_product_name} · ${[x.category, x.colour, x.fabric, x.weave_or_motif].filter(Boolean).join(", ")}`
+    + ` · ${x.retail_price ?? "unpriced"} · ${x.stock_qty ?? 0} in stock`
+    + ` · imagery: ${imageryOf(x)} [id ${x.product_id}]`).join("\n");
   const looks = w.looks.map((l: any) =>
     `- #${l.look_no} ${l.name}: ${l.summary ?? "no description"} (${l.source === "Own" ? "ours, may follow closely" : "found, direction only"}) [id ${l.look_id}]`).join("\n");
   const past = w.past.map((c: any) =>
@@ -134,7 +148,12 @@ const SHAPE = `{
     "offer": string,
     "brief": string,
     "art_direction": string,
+    "casting": string,
     "look_id": string | null,
+    "pieces": [{
+      "product_id": string, "why": string,
+      "imagery": "ready" | "needs a shoot" | "worth reshooting"
+    }],
     "posts": [{
       "channel": string, "placement": string, "title": string, "body": string,
       "hashtags": string, "cta": string, "day_offset": number,
@@ -153,7 +172,37 @@ const SHAPE = `{
   }
 }`;
 
-const RULES = (brand: string, mode: string, catalogue: string, search: boolean) => `${brand}
+// A Banarasi piece sells into Tamil Nadu and into Punjab, but not with the same
+// words, the same festival or the same casting. This is the difference between
+// a campaign that reads as local and one that reads as imported.
+const marketBlock = (market: string) => market
+  ? `\n\nTHE MARKET THIS IS FOR: ${market}.
+Everything you write is for a buyer there, and a campaign that could run anywhere has failed.
+
+- Time it to that market's own calendar: its festivals, its wedding season, its auspicious months
+  and the dates those actually fall on this year. A date that matters in the north may be an
+  ordinary week there.
+- Write in the language and register that market buys in, and say in "say" which language the copy
+  is in. If the copy should be in a language other than English, write it in that language — in its
+  own script, not transliterated — and put an English gloss in brackets after each line so the
+  owner can read what they are approving. If you are not confident writing that language properly,
+  write the copy in English and say plainly that it needs a native speaker before it runs.
+- Cast and style the imagery for that market, in "casting". A Banarasi saree is the brand's own
+  craft and it travels — the piece does not change — but who wears it, how it is draped, the
+  jewellery, the hair, the flowers and the setting all belong to the market being sold to. A shoot
+  that looks like it was made for somewhere else is the thing to avoid.
+- Say what stays the brand's and what bends to the market. The weave, the craft and the story of
+  where it is made are the brand's and never change. Styling, casting, language, festival and
+  price framing bend.
+- Write about the market's traditions as a brand that respects them, not as a visitor explaining
+  them. No claim about a community's customs that you are not sure of: if a hook depends on a
+  tradition, say in "say" that it should be checked with someone from that market before it runs.`
+  : `\n\nNo market has been named for this campaign. Ask which market it is for before you write
+copy or casting, because both change completely with it — it is the single thing that most changes
+this campaign.`;
+
+const RULES = (brand: string, mode: string, catalogue: string, search: boolean,
+               market: string) => `${brand}
 
 You are this brand's campaign lead. You design one campaign at a time, in conversation with the
 owner, for Instagram, Facebook and Meta ads. You are talking to the person who owns the business
@@ -167,6 +216,7 @@ what a competitor spends — say plainly that you do not have it and either ask 
 assumption inside your own text.
 
 ${catalogue}
+${marketBlock(market)}
 
 HOW YOU WORK THIS TURN: ${mode === "Interview"
   ? `Take the brief properly. Ask for ONE missing thing at a time, the one that most changes the
@@ -188,6 +238,17 @@ offer, a customer-facing question. "day_offset" counts days from the start, from
 must be one of the ids above or null.
 "art_direction" on a post is the shot: what is in frame and how, in one or two lines, consistent
 with the campaign's own art direction.
+"pieces" is the 6 to 10 pieces this campaign actually sells, chosen from the catalogue above —
+not all of them, and never a piece with no stock. "why" is one short line saying what makes that
+piece right for THIS market and this moment, in terms a buyer there would recognise. "imagery" is
+read from what the catalogue says each piece already has: "ready" when its existing photographs
+would carry the campaign, "needs a shoot" when it has none or only the owner's raw supplier
+photographs, "worth reshooting" when it has images but they do not suit this campaign's direction.
+Say in "say" how many need shooting, so the owner knows the work before they agree.
+"casting" is who is in the pictures and how they are styled, written as a casting and styling note
+a photographer could work from. Fit it to the market named above. Never describe anyone by skin
+tone alone, and never write a stereotype: write the region, the styling and the occasion the way a
+fashion house briefs a shoot — the drape, the jewellery, the hair, the flowers, the setting.
 "look_id" is one of the look ids above when the campaign's imagery should follow a look, else null.
 "ad_plan" is the paid half: two to four ad sets, each with who it targets and the copy for it.
 Keep "primary_text" under 125 characters, "headline" under 40.
@@ -391,8 +452,20 @@ Deno.serve(async (req) => {
     }
     if (!history.length) return json({ error: "Say what the campaign is for first." }, 400);
 
-    const out = await ask(provider, RULES(brand, mode, catalogueLines(w), wantSearch), history,
-                          wantSearch);
+    // The market is set once on the thread and carried into every later turn,
+    // so the owner does not have to repeat it.
+    let market = String(p.market ?? "").trim().slice(0, 120);
+    if (!market && p.thread_id) {
+      const t = await admin.from("campaign_threads").select("market")
+        .eq("thread_id", p.thread_id).maybeSingle();
+      market = String(t.data?.market ?? "").trim();
+    }
+    if (market && p.thread_id) {
+      await admin.from("campaign_threads").update({ market }).eq("thread_id", p.thread_id);
+    }
+
+    const out = await ask(provider, RULES(brand, mode, catalogueLines(w), wantSearch, market),
+                          history, wantSearch);
     const d = out.data || {};
 
     if (runId) {
@@ -407,6 +480,14 @@ Deno.serve(async (req) => {
     const known = new Set(w.products.map((x: any) => x.product_id));
     const knownLooks = new Set(w.looks.map((x: any) => x.look_id));
     if (d.proposal) {
+      d.proposal.market = market || null;
+      if (Array.isArray(d.proposal.pieces)) {
+        d.proposal.pieces = d.proposal.pieces
+          .filter((x: any) => known.has(x?.product_id))
+          .slice(0, 12);
+      } else {
+        d.proposal.pieces = [];
+      }
       d.proposal.posts = (d.proposal.posts ?? []).map((post: any) => ({
         ...post, product_id: known.has(post.product_id) ? post.product_id : null,
       }));
