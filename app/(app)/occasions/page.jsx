@@ -44,7 +44,7 @@ export default function Occasions() {
       { key: 'avoid', label: 'What to avoid', example: '' },
       { key: 'note', label: 'Note', example: '' },
     ],
-    matchOn: 'name',
+    matchOn: ['name'],
     columns: [
       { key: 'name', label: 'Occasion' },
       { key: 'occasion_date', label: 'When',

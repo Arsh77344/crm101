@@ -173,6 +173,32 @@ def main():
                     bad.append(f"{where}: reads proposal.{f}, which campaign-agent's "
                                f"SHAPE never declares and this page never adds")
 
+    # A third seam, the same bug a level sideways: a page hands a shared
+    # component a config value of the wrong shape. `Sheet` calls
+    # `cfg.matchOn.find(...)`, so a string there is a TypeError the moment
+    # somebody imports a spreadsheet -- and nothing on the page says so until
+    # they do. Checked statically because the failure needs a real import to
+    # show up.
+    ARRAY_KEYS = {
+        "matchOn": "components/Sheet.jsx calls .find() on it",
+        "columns": "crud.jsx maps over it",
+        "fields": "crud.jsx maps over it",
+        "options": "crud.jsx maps over a field's options",
+        "pkCols": "Children.jsx maps over it",
+    }
+    for path in pages():
+        text = open(path, encoding="utf-8").read()
+        where = os.path.relpath(path, ROOT)
+        for key, why in ARRAY_KEYS.items():
+            for m in re.finditer(rf"\b{key}:\s*(.)", text):
+                checked += 1
+                nxt = m.group(1)
+                # An array literal, a spread, or an expression that could be
+                # either -- a bare quote is the one that is certainly wrong.
+                if nxt in "\"'":
+                    bad.append(f"{where}: {key} is a string, but {why} \u2014 wrap it "
+                               f"in an array")
+
     seen, uniq = set(), []
     for b in bad:
         if b not in seen:
