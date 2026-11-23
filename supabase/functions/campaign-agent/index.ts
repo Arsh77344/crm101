@@ -623,12 +623,14 @@ Deno.serve(async (req) => {
             model: out.model },
         ]);
       }
-      return json({ ok: true, thread_id: threadId, say: d.say ?? "", proposal: d.proposal });
+      return json({ ok: true, thread_id: threadId, say: d.say ?? "",
+                    options: d.options ?? [], proposal: d.proposal });
     }
 
     return json({ ok: true, provider, model: out.model,
                   say: d.say ?? "", ask: d.ask ?? null,
-                  ready: Boolean(d.ready && d.proposal), proposal: d.proposal ?? null });
+                  ready: Boolean(d.ready && d.proposal),
+                  options: d.options ?? [], proposal: d.proposal ?? null });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (runId) {

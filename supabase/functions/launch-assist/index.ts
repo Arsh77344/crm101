@@ -68,7 +68,7 @@ const KINDS: Record<string, Kind> = {
     whole: "saree",
     parts: {
       Overall: "the whole piece laid out or draped, so the proportions and the layout are visible",
-      Pallu: "the pallu \u2014 the decorated end that falls over the shoulder",
+      Pallu: "the pallu — the decorated end that falls over the shoulder",
       Border: "the border running along the edge",
       Body: "the body or field of the piece, with its repeating motif",
       Blouse: "the blouse piece that comes with it",
@@ -412,14 +412,14 @@ function anchorBlock(mode: string) {
     : mode === "Mannequin"
       ? `Put the dress form in that same place. There is no person in this frame.`
       : `This frame is a still life: no person and no mannequin. Put the cloth down somewhere in `
-        + `that same place \u2014 on a step, a ledge, a wall, whatever that scene already has.`;
+        + `that same place — on a step, a ledge, a wall, whatever that scene already has.`;
   return `\n\nThe FINAL photograph attached is another frame from this same shoot, already taken. `
     + `This frame must look like it was taken minutes later in the same place: the same location, `
     + `the same wall, floor and props, the same palette, the same time of day. The light may shift `
     + `a little and the camera may move, but a viewer putting the two side by side must see one `
     + `shoot. ${change}\n\nTake the PLACE from that final photograph and the GARMENT from the `
     + `owner's own photographs above it. If the garment in that final photograph differs at all `
-    + `from the owner's photographs, the owner's photographs are right and that one is wrong \u2014 `
+    + `from the owner's photographs, the owner's photographs are right and that one is wrong — `
     + `never copy the garment from it.`;
 }
 
