@@ -182,7 +182,8 @@
    "created_at",
    "updated_at",
    "created_by",
-   "market"
+   "market",
+   "occasion_id"
   ],
   "campaigns": [
    "campaign_id",
@@ -202,7 +203,8 @@
    "art_direction",
    "audience_note",
    "ad_plan",
-   "market"
+   "market",
+   "occasion_id"
   ],
   "carts": [
    "cart_id",
@@ -509,6 +511,41 @@
    "provider_name",
    "created_at"
   ],
+  "occasions": [
+   "occasion_id",
+   "name",
+   "occasion_date",
+   "until_date",
+   "date_basis",
+   "lead_weeks",
+   "kind",
+   "region",
+   "meaning",
+   "what_sells",
+   "avoid",
+   "note",
+   "active",
+   "created_at"
+  ],
+  "occasions_upcoming": [
+   "occasion_id",
+   "name",
+   "occasion_date",
+   "until_date",
+   "date_basis",
+   "lead_weeks",
+   "kind",
+   "region",
+   "meaning",
+   "what_sells",
+   "avoid",
+   "note",
+   "active",
+   "created_at",
+   "promote_from",
+   "days_away",
+   "days_until_promote"
+  ],
   "opportunities": [
    "opportunity_id",
    "contact_id",
@@ -805,7 +842,9 @@
   "campaign_posts>campaigns",
   "campaign_posts>products",
   "campaign_threads>campaigns",
+  "campaign_threads>occasions",
   "campaigns>campaign_threads",
+  "campaigns>occasions",
   "carts>contacts",
   "carts>orders",
   "carts>products",

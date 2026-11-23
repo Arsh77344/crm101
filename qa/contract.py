@@ -8,6 +8,13 @@ function, so a stub that returns the field proves nothing about the real one.
 This reads both sides of that seam: every `out.<field>` in a page that called an
 edge function, against the keys that function actually returns.
 
+The same bug has a second home. A page does not only read the reply object: it
+reads the proposal inside it, which is stored and read back later, so the chain
+is SHAPE -> model -> database -> page. A field the page reads off that proposal
+but the SHAPE never declares is the identical mistake one level down, and the
+`out.<field>` check above cannot see it. So the declared SHAPE is parsed too and
+checked against every `proposal.<field>` the pages read.
+
     python3 qa/contract.py
 """
 import os, re, sys
@@ -66,6 +73,52 @@ def returned(slug):
     return keys
 
 
+def shape_keys(slug="campaign-agent", const="SHAPE", level="proposal"):
+    """The keys a function's declared SHAPE carries at one nesting level.
+
+    The SHAPE is a template literal of JSON-ish text, so it is read as text
+    rather than parsed: anything of the form `"key":` inside the braces that
+    follow `"<level>"` counts, at that brace depth only.
+    """
+    path = os.path.join(ROOT, "supabase", "functions", slug, "index.ts")
+    if not os.path.exists(path):
+        return None
+    text = open(path, encoding="utf-8").read()
+    m = re.search(rf"const {const} = `", text)
+    if not m:
+        return None
+    end = text.index("`;", m.end())
+    body = text[m.end():end]
+
+    at = body.find(f'"{level}"')
+    if at == -1:
+        return None
+    start = body.find("{", at)
+    if start == -1:
+        return None
+    depth, i = 0, start
+    while i < len(body):
+        if body[i] == "{":
+            depth += 1
+        elif body[i] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    inner = body[start + 1:i]
+
+    keys, d = set(), 0
+    for mm in re.finditer(r'[{}\[\]]|"([a-z_][\w]*)"\s*:', inner):
+        tok = mm.group(0)
+        if tok in "{[":
+            d += 1
+        elif tok in "}]":
+            d -= 1
+        elif d == 0 and mm.group(1):
+            keys.add(mm.group(1))
+    return keys
+
+
 def pages():
     out = []
     for base, _, names in os.walk(os.path.join(ROOT, "app")):
@@ -96,6 +149,29 @@ def main():
                     checked += 1
                     if f not in keys and f not in ALWAYS:
                         bad.append(f"{where}: reads {var}.{f} off {slug}, which never returns {f!r}")
+
+    # The second seam: what the pages read off a stored proposal, against the
+    # shape the function declares it returns.
+    declared = shape_keys()
+    if declared is None:
+        bad.append("qa/contract.py: could not read SHAPE out of supabase/functions/campaign-agent")
+    else:
+        for path in pages():
+            text = open(path, encoding="utf-8").read()
+            if "proposal" not in text:
+                continue
+            where = os.path.relpath(path, ROOT)
+            # A page may add a key of its own to the proposal before storing it
+            # -- the studio folds the reply's `options` in, so the directions
+            # survive a reload -- and reading that key back is correct. Whatever
+            # a page spreads into is as good as declared, for that page.
+            merged = set(re.findall(r"\.\.\.(?:\w+\??\.)?proposal,\s*([a-z_][\w]*)\s*:", text))
+            ok = declared | merged
+            for f in sorted(set(re.findall(r"\bproposal\??\.([a-z_][\w]*)\b", text))):
+                checked += 1
+                if f not in ok:
+                    bad.append(f"{where}: reads proposal.{f}, which campaign-agent's "
+                               f"SHAPE never declares and this page never adds")
 
     seen, uniq = set(), []
     for b in bad:

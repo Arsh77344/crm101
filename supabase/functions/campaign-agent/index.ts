@@ -68,7 +68,7 @@ async function brandContext(admin: any) {
 // What the agent is allowed to know: the real catalogue, the real looks, what
 // the last campaigns actually did. Everything else it must ask for.
 async function workspace(admin: any) {
-  const [products, collections, looks, past, orders] = await Promise.all([
+  const [products, collections, looks, past, orders, occasions, templates] = await Promise.all([
     admin.from("products")
       .select("product_id,public_product_name,category,fabric,colour,weave_or_motif,retail_price,"
         + "stock_qty,status,story,description,"
@@ -83,6 +83,16 @@ async function workspace(admin: any) {
       .order("created_at", { ascending: false }).limit(8),
     admin.from("orders").select("total,ordered_at,first_touch_campaign")
       .order("ordered_at", { ascending: false }).limit(60),
+    // The occasions calendar, with the run-up already worked out by the view so
+    // the agent and the browser cannot disagree about what "coming up" means.
+    admin.from("occasions_upcoming")
+      .select("occasion_id,name,occasion_date,until_date,date_basis,lead_weeks,kind,region,"
+        + "meaning,what_sells,avoid,note,promote_from,days_away,days_until_promote")
+      .gte("days_away", 0).order("occasion_date").limit(12),
+    // A WhatsApp message the brand starts needs a template the provider already
+    // approved, so the agent may only plan around the ones that exist.
+    admin.from("message_templates").select("name,channel,category,provider_status")
+      .eq("provider_status", "Approved").limit(40),
   ]);
   const p = products.data ?? [];
   const sold = (orders.data ?? []);
@@ -90,6 +100,7 @@ async function workspace(admin: any) {
   return {
     products: p, collections: collections.data ?? [], looks: looks.data ?? [],
     past: past.data ?? [],
+    occasions: occasions.data ?? [], templates: templates.data ?? [],
     trade: { orders: sold.length, revenue,
              average: sold.length ? Math.round(revenue / sold.length) : null },
   };
@@ -130,6 +141,70 @@ function catalogueLines(w: any) {
   ].join("\n");
 }
 
+// What is coming up, and how long until its run-up starts. The owner's rule is
+// that promotion begins about three weeks out, so `days_until_promote` is the
+// number that decides whether an occasion is in play, not `days_away`.
+//
+// Dates are carried with their basis. A lunar festival is published differently
+// by different panchangs -- Holi 2027 appears as both 22 and 23 March -- so an
+// unconfirmed date must never reach a customer as fact.
+function occasionLines(w: any) {
+  const list = w.occasions ?? [];
+  if (!list.length) {
+    return "\nNo occasions on the calendar. If timing matters to this campaign, say so and ask the "
+      + "owner to add the occasion on the Occasions page rather than guessing a date.";
+  }
+  const rows = list.map((o: any) => {
+    const span = o.until_date && o.until_date !== o.occasion_date
+      ? `${o.occasion_date} to ${o.until_date}` : o.occasion_date;
+    const lead = o.days_until_promote <= 0
+      ? `run-up is ON NOW, ${o.days_away} days until the day itself`
+      : `run-up starts in ${o.days_until_promote} days (from ${o.promote_from})`;
+    return `- ${o.name} · ${o.kind}${o.region ? ` · ${o.region}` : ""} · ${span}`
+      + ` · ${o.date_basis === "Approximate" ? "DATE APPROXIMATE" : `date ${o.date_basis.toLowerCase()}`}`
+      + ` · ${lead} [id ${o.occasion_id}]`
+      + (o.meaning ? `\n    what it means: ${o.meaning}` : "")
+      + (o.what_sells ? `\n    what sells: ${o.what_sells}` : "")
+      + (o.avoid ? `\n    WHAT WOULD BE WRONG: ${o.avoid}` : "");
+  }).join("\n");
+  return `\nWhat is coming up, from the owner's own calendar:\n${rows}
+
+Use this rather than your own idea of when a festival falls. Where an occasion is in its run-up or
+about to be, say in "say" whether this campaign should be built on it, and set "occasion" to it if
+it should. Where a row says WHAT WOULD BE WRONG, that is the owner's own warning and it overrides
+anything you would otherwise have planned for that market.
+
+NEVER PRINT AN UNCONFIRMED DATE. Where a date is marked DATE APPROXIMATE you may plan to it, but no
+caption, email, headline or message may state that date to a customer. Write "this Diwali" or "the
+week of the festival", not the day. Say in "say" which date the owner should confirm. A date marked
+confirmed or fixed may be printed.`;
+}
+
+// The workspace's own sending rules. An omni-channel plan that breaks them
+// cannot actually be run, so the agent is told them rather than being left to
+// invent a cadence.
+function guardLines(settings: Record<string, string>, w: any) {
+  const approved = (w.templates ?? []).filter((t: any) => /whats/i.test(t.channel ?? ""));
+  const names = approved.map((t: any) => `"${t.name}" (${t.category})`).join(", ");
+  const maxWeek = settings.guard_max_marketing_per_week;
+  const qs = settings.guard_quiet_start, qe = settings.guard_quiet_end;
+  return `WHAT THIS WORKSPACE WILL ACTUALLY SEND. These are the owner's own rules, already enforced
+by the system, so a plan that breaks them cannot be run:
+
+- Marketing messages per person per week: ${maxWeek || "not set"}. Count every WhatsApp broadcast
+  and marketing email in your plan against that ceiling, per person, and say in "say" what the
+  plan comes to. Instagram posts do not count: nobody is messaged.
+- Quiet hours: ${qs && qe ? `nothing marketing goes out between ${qs}:00 and ${qe}:00` : "not set"}.
+- A WhatsApp message the brand starts must use a template the provider approved in advance.
+  ${approved.length
+    ? `Approved and usable now: ${names}. Plan around these.`
+    : `There are no approved WhatsApp templates yet. You may still plan the WhatsApp step, but say
+  plainly that a template has to be written on the Message templates page and approved before it
+  can go out, and do not imply it can be sent this week.`}
+- Replies inside a conversation someone started are free of all of the above. Lean on that: a
+  story that makes someone message first is worth more than a broadcast.`;
+}
+
 const BRIEFING_ASK = `Nobody is at the screen. Look at the week ahead on your own and propose the
 one campaign worth running next.
 
@@ -159,6 +234,13 @@ const SHAPE = `{
     "budget": number | null,
     "offer": string,
     "brief": string,
+    "spine": string,
+    "occasion": null | { "occasion_id": string | null, "name": string, "why": string },
+    "channel_plan": [{
+      "channel": string, "role": string, "cadence": string,
+      "first_move": string, "hands_off_to": string
+    }],
+    "six_cs": [{ "c": string, "verdict": "met" | "weak", "note": string }],
     "art_direction": string,
     "casting": string,
     "look_id": string | null,
@@ -194,11 +276,16 @@ Everything you write is for a buyer there, and a campaign that could run anywher
 - Time it to that market's own calendar: its festivals, its wedding season, its auspicious months
   and the dates those actually fall on this year. A date that matters in the north may be an
   ordinary week there.
-- Write in the language and register that market buys in, and say in "say" which language the copy
-  is in. If the copy should be in a language other than English, write it in that language — in its
-  own script, not transliterated — and put an English gloss in brackets after each line so the
-  owner can read what they are approving. If you are not confident writing that language properly,
-  write the copy in English and say plainly that it needs a native speaker before it runs.
+- Write every word in English. This is a decision the owner has made and it is not yours to
+  revisit: the house sells across several markets and one clear voice in English carries further
+  than a different voice per language, and copy half-translated by someone who does not speak the
+  language reads as cheap. Do not write a line, a caption, a headline or a hashtag in another
+  language, do not transliterate one, and do not offer a translated version.
+- English does not mean generic. The register still belongs to the market: what the occasion is
+  called there, what the garment is called there, what a buyer there would notice first. A proper
+  noun is not a translation — Margazhi, Puthandu, Aadi, a weave's own name — so use the real name
+  of a thing rather than an English approximation of it, and make the sentence around it carry the
+  meaning for a reader who does not know the word.
 - Cast and style the imagery for that market, in "casting". A Banarasi saree is the brand's own
   craft and it travels — the piece does not change — but who wears it, how it is draped, the
   jewellery, the hair, the flowers and the setting all belong to the market being sold to. A shoot
@@ -276,8 +363,88 @@ HOW TO WRITE IT:
 - OLD STORY, PRESENT TENSE. The heritage is the material, not the tone. Write it for someone
   scrolling now, not as a museum label.`;
 
+// One campaign across every touchpoint the brand actually has, rather than six
+// posts on Instagram. The owner asked for an omni-channel plan built on proper
+// integrated marketing communications, and confirmed all four groups are live:
+// Instagram, WhatsApp, email, and the website, showroom and parcel insert.
+//
+// The constraint that makes this real rather than a diagram: a WhatsApp message
+// the brand starts has to use a template the provider approved in advance, and
+// the workspace keeps its own quiet hours and a cap on marketing messages per
+// week. A plan that ignores those cannot be executed, so the agent is told them.
+const OMNI = (guards: string) => `ONE CAMPAIGN, EVERY TOUCHPOINT. Not a set of posts. The owner
+works to integrated marketing communications, so a campaign is one idea carried across every place
+a buyer meets this brand, with each place doing the job it is best at.
+
+START FROM THE SPINE. Write one sentence — the spine — that is the whole campaign. Every
+channel then says that same thing in its own way. If you cannot write the spine in one sentence,
+the campaign is not one campaign yet and you should say so rather than papering over it with
+channel ideas.
+
+WHAT EACH PLACE IS FOR. Give each channel a job, and do not repeat one job in two places:
+
+- Instagram feed — the piece itself, shot properly. This is the shop window and the first
+  impression. Stills, close detail, the finished garment worn.
+- Instagram reels — motion: the loom, the drape, the fall of the cloth, hands working. What a
+  still cannot show.
+- Instagram stories — the daily, unpolished thread between posts, and the only place a direct
+  "ask me" belongs. Where someone raises a hand.
+- WhatsApp — where a raised hand is answered and a sale closes. One to one, in the buyer's own
+  time. Broadcast only to people who asked for it.
+- Email — the long form. The one place with room for the whole story: the motif, the weave, the
+  workshop, the provenance. Where a buyer who is already interested goes deeper.
+- Website — where the campaign lands, and the one place every other channel points at. The page
+  must say the same thing the campaign says; if it does not, name what needs changing on it.
+- Showroom and in-person — the piece in the hand. Where the cloth does the arguing. Appointments
+  and private viewings, invited from WhatsApp and email.
+- Parcel insert — the last touchpoint and the most neglected. What goes in the box: the piece's
+  own story, who made it, how to care for it. This is where a buyer becomes someone who tells
+  other people, so it is part of the campaign, not packaging.
+
+HANDOFFS, NOT BROADCASTS. For each channel say where someone goes next, and make sure those
+handoffs form a path rather than a circle: discovery, then interest, then the conversation, then
+the sale, then the parcel, then the telling. A channel with no next step is a dead end and should
+be cut or given one.
+
+${guards}
+
+WHAT IS NOT YOURS TO INVENT. Only plan on a channel the brand has. Do not add a channel because it
+would round out the plan — no print, no influencers, no events, no SMS, no YouTube, no pop-up
+— unless the owner has raised it. If you think one is genuinely missing, say so in one line in
+"say" and leave it out of the plan.`;
+
+// The owner asked for the campaign to be held to the 6 C's of integrated
+// marketing communications. The first four are Pickton and Broderick's;
+// Communications and Compelling are the pair the six-C version adds.
+//
+// They are a check, not a template: the agent plans the campaign and then says
+// where it is weak against each one. A self-check that always comes back "met"
+// six times is worthless, so the agent is told to find the weak one.
+const SIX_CS = `THE SIX C'S. The owner holds a campaign to these, so check your own plan against
+them before you return it and report the result in "six_cs", one entry per C, in this order:
+
+1. Coherence — do the channels you chose logically suit the message each one carries? A long
+   provenance story does not belong in a story sticker, and a one-line ask does not belong in an
+   email.
+2. Consistency — do the messages reinforce each other rather than contradict? Watch for the
+   plan that calls a piece rare in one place and discounts it in another.
+3. Continuity — does this connect to what came before and what comes after? Name the earlier
+   campaign or occasion it follows from if there is one, and what this one sets up next. A campaign
+   that begins from nothing every time teaches a buyer nothing.
+4. Complementary — does the whole add up to more than the parts? Each channel should make the
+   next one land harder. If any channel could be removed without the campaign losing anything,
+   that channel is decoration.
+5. Communications — is every piece of it clear to someone who does not already know this craft?
+   A buyer who has to look a word up has been lost. Clarity, not simplification.
+6. Compelling — is there a reason to go and find out more? Say what the pull is. "Beautiful
+   piece, buy it" is not a pull, and neither is a discount.
+
+For each, set "verdict" to "met" or "weak" and write one short, specific line in "note". Be honest:
+mark at least one weak unless the plan genuinely has no soft spot, and where you mark one weak, say
+in that note what would fix it. The owner would rather read a real weakness than six ticks.`;
+
 const RULES = (brand: string, mode: string, catalogue: string, search: boolean,
-               market: string) => `${brand}
+               market: string, occasions: string, guards: string) => `${brand}
 
 You are this brand's campaign lead. You design one campaign at a time, in conversation with the
 owner, for Instagram, Facebook and Meta ads. You are talking to the person who owns the business
@@ -291,9 +458,14 @@ what a competitor spends — say plainly that you do not have it and either ask 
 assumption inside your own text.
 
 ${catalogue}
+${occasions}
 
 ${STORY}
 ${marketBlock(market)}
+
+${OMNI(guards)}
+
+${SIX_CS}
 
 REVISING, NOT REDRAFTING. If a proposal has already been put to the owner in this conversation
 and they are now asking for a change, change ONLY what they asked for and return everything else
@@ -325,6 +497,15 @@ needs four new shoots says so, the one that leans on a tradition you are unsure 
 exactly one "recommended" and say in "say" which you picked and why in one line. Then build THAT
 one out in full in "proposal". The owner can ask for a different one, and then you build that
 instead, keeping everything they have already approved.
+"spine" is the one sentence the whole campaign says. Every channel repeats it differently.
+"occasion" is the occasion from the calendar this campaign is built on, with its id, or null where
+the campaign is not tied to one. Never invent an occasion that is not on the calendar above.
+"channel_plan" is one entry per channel you are actually using, in the order a buyer meets them.
+"role" is the job that channel does in THIS campaign, in one line, and no two channels share a job.
+"cadence" is how often over the window. "first_move" is the concrete first thing to do there, the
+kind of instruction someone could act on this afternoon. "hands_off_to" names where the person goes
+next — the channel or step — and the last one in the path says so.
+"six_cs" is your own check, six entries in the order given above.
 "posts" are organic posts, 4 to 8 of them. Each carries a different part of the one story — the
 material, the making, a detail worth looking at closely, the person who made it, how it is worn,
 the offer — in an order that builds rather than repeats. "day_offset" counts days from the start,
@@ -557,7 +738,9 @@ Deno.serve(async (req) => {
       await admin.from("campaign_threads").update({ market }).eq("thread_id", p.thread_id);
     }
 
-    const out = await ask(provider, RULES(brand, mode, catalogueLines(w), wantSearch, market),
+    const out = await ask(provider,
+                          RULES(brand, mode, catalogueLines(w), wantSearch, market,
+                                occasionLines(w), guardLines(settings, w)),
                           history, wantSearch);
     const d = out.data || {};
 

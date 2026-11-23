@@ -3,6 +3,7 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@/lib/db';
 import { Page, Badge, Loading, ErrorNote, when } from '@/components/ui';
+import { loadOccasions, covers, iso, runUp, spanLabel } from '@/lib/occasions';
 
 const CHAN = { Instagram: 'ig', Email: 'em', WhatsApp: 'wa', Facebook: 'ig', SMS: 'wa' };
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -23,6 +24,11 @@ function Calendar() {
     return data || [];
   }, [cursor.y, cursor.m]);
 
+  // The occasions calendar, so the grid shows what is coming as well as what
+  // has been scheduled. The whole table is two dozen rows, so it is fetched
+  // once and filtered per cell rather than queried per month.
+  const occ = useQuery(async (c) => loadOccasions(c), []);
+  const occasions = occ.data || [];
   const posts = q.data || [];
   const byDay = {};
   posts.forEach((p) => { const k = new Date(p.scheduled_for).getDate(); (byDay[k] ||= []).push(p); });
@@ -45,9 +51,31 @@ function Calendar() {
         <button className="btn btn-sm" onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}>This month</button>
         <button className="btn btn-sm" onClick={() => shift(1)}>Next ›</button>
       </>}>
-      <ErrorNote error={q.error} />
+      <ErrorNote error={q.error || occ.error} />
       {q.loading ? <Loading /> : (
         <>
+          {(() => {
+            // What to act on, rather than what merely falls in view: an
+            // occasion whose run-up has started or starts within the fortnight.
+            const soon = occasions
+              .filter((o) => ['on', 'soon'].includes(runUp(o).state))
+              .sort((a, b) => a.occasion_date.localeCompare(b.occasion_date))
+              .slice(0, 4);
+            if (!soon.length) return null;
+            return (
+              <div className="note plain small" style={{ marginBottom: 14 }}>
+                <strong>Coming up.</strong>{' '}
+                {soon.map((o, i) => (
+                  <span key={o.occasion_id}>
+                    {i ? ' · ' : ''}
+                    <Link className="link" href={`/occasions?id=${o.occasion_id}`}>{o.name}</Link>
+                    {' '}{spanLabel(o)}, {runUp(o).text}
+                  </span>))}
+                {' · '}
+                <Link className="link" href="/studio">Build a campaign for one</Link>
+              </div>);
+          })()}
+
           <div className="cal" style={{ marginBottom: 18 }}>
             {DOW.map((d) => <div className="dow" key={d}>{d}</div>)}
             {cells.map((d, i) => {
@@ -57,6 +85,13 @@ function Calendar() {
               return (
                 <div className={`day ${isToday ? 'today' : ''}`} key={i}>
                   <div className="dnum">{d.getDate()}</div>
+                  {occasions.filter((o) => covers(o, d)).map((o) => (
+                    <Link key={o.occasion_id} className="ev occ"
+                      href={`/occasions?id=${o.occasion_id}`}
+                      title={`${o.name} \u00b7 ${o.kind}${o.region ? ` \u00b7 ${o.region}` : ''}${
+                        o.date_basis === 'Approximate' ? ' \u00b7 date approximate' : ''}`}>
+                      {o.name}
+                    </Link>))}
                   {items.map((p) => (
                     <Link key={p.post_id} className={`ev ${CHAN[p.channel] || ''}`}
                       href={`/campaigns?id=${p.campaign_id}`} title={`${p.title} · ${p.channel} · ${p.status}`}>

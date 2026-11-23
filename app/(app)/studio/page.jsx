@@ -6,6 +6,7 @@ import { PROVIDERS, NO_KEYS, providerOption, firstWithKey, hasKey } from '@/lib/
 import { Page, Badge, Empty, Loading, ErrorNote, money, when } from '@/components/ui';
 import Dictate from '@/components/Dictate';
 import { executeCampaign } from '@/lib/execute';
+import { loadOccasions, runUp, spanLabel } from '@/lib/occasions';
 
 async function agent(body) {
   const { data: { session } } = await sb().auth.getSession();
@@ -40,6 +41,14 @@ export default function Studio() {
   const [ran, setRan] = useState(null);
   const [perPost, setPerPost] = useState(2);
   const [keys, setKeys] = useState(null);
+
+  // What is coming up, shown beside the brief box. The agent reads the same
+  // calendar from the database, so what the owner sees here is what it sees.
+  const occ = useQuery(async (c) => loadOccasions(c), []);
+  const soon = (occ.data || [])
+    .filter((o) => ['on', 'soon'].includes(runUp(o).state))
+    .sort((a, b) => a.occasion_date.localeCompare(b.occasion_date))
+    .slice(0, 3);
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -171,7 +180,7 @@ export default function Studio() {
         <button className="btn btn-sm" onClick={() => { setSel(null); setDraft(''); }}>New campaign</button>
         <Link className="btn btn-sm" href="/campaigns">All campaigns</Link>
       </>}>
-      <ErrorNote error={q.error || err} />
+      <ErrorNote error={q.error || occ.error || err} />
 
       {keys && !keys.brand_set && (
         <div className="note warn small" style={{ marginBottom: 14 }}>
@@ -247,6 +256,24 @@ export default function Studio() {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
               }} />
             <Dictate onText={(f) => setDraft((cur) => f(cur))} label="Say it instead" />
+            {soon.length > 0 && (
+              <div className="note plain small" data-occasions>
+                <strong>Coming up.</strong>{' '}
+                {soon.map((o, i) => (
+                  <span key={o.occasion_id}>
+                    {i ? ' · ' : ''}
+                    <button className="link" type="button"
+                      style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+                      onClick={() => setDraft((cur) => (cur.trim()
+                        ? `${cur.trim()} Build it around ${o.name}.`
+                        : `A campaign for ${o.name}.`))}>
+                      {o.name}
+                    </button>
+                    {' '}{spanLabel(o)}, {runUp(o).text}
+                  </span>))}
+                {' · '}
+                <Link className="link" href="/occasions">The calendar</Link>
+              </div>)}
             <div className="field" style={{ marginBottom: 9 }}>
               <label>Which market is this for</label>
               <input value={market || marketOf} placeholder="South India · Tamil Nadu · Gulf NRI · all of India"
@@ -335,11 +362,48 @@ export default function Studio() {
                     {proposal.budget ? <span className="badge">{money(proposal.budget)}</span> : null}
                     <span className="badge">{proposal.start_date} → {proposal.end_date}</span>
                   </div>
+                  {proposal.spine && (
+                    <div className="note small" data-spine>
+                      <strong>The spine.</strong> {proposal.spine}
+                    </div>)}
+                  {proposal.occasion?.name && (
+                    <div className="small"><strong>Built on:</strong> {proposal.occasion.name}
+                      {proposal.occasion.why ? ` \u2014 ${proposal.occasion.why}` : ''}</div>)}
                   {proposal.offer && <div className="small"><strong>Offer:</strong> {proposal.offer}</div>}
                   <div className="small"><strong>Who it is for:</strong> {proposal.audience_note}</div>
                   <div className="small"><strong>Art direction:</strong> {proposal.art_direction}</div>
                   {proposal.casting && (
                     <div className="small"><strong>Casting:</strong> {proposal.casting}</div>)}
+                  {(proposal.channel_plan || []).length > 0 && (
+                    <div data-channel-plan>
+                      <div className="small"><strong>Across the channels:</strong></div>
+                      <div className="stack" style={{ gap: 6, marginTop: 5 }}>
+                        {proposal.channel_plan.map((ch, i) => (
+                          <div key={i} className="small" style={{ paddingLeft: 9,
+                               borderLeft: '2px solid var(--line)' }}>
+                            <strong>{ch.channel}</strong>
+                            {ch.cadence ? <span className="faint"> · {ch.cadence}</span> : null}
+                            {ch.role ? <div className="muted">{ch.role}</div> : null}
+                            {ch.first_move ? <div>First move: {ch.first_move}</div> : null}
+                            {ch.hands_off_to
+                              ? <div className="faint">Hands off to {ch.hands_off_to}</div> : null}
+                          </div>))}
+                      </div>
+                    </div>)}
+                  {(proposal.six_cs || []).length > 0 && (
+                    <div data-six-cs>
+                      <div className="small"><strong>Its own check, the six C\u2019s:</strong></div>
+                      <div className="row wrap" style={{ gap: 5, marginTop: 5 }}>
+                        {proposal.six_cs.map((x, i) => (
+                          <span key={i}
+                            className={`badge ${x.verdict === 'weak' ? 'b-amber' : 'b-green'}`}
+                            title={x.note || ''}>{x.c}</span>))}
+                      </div>
+                      {proposal.six_cs.filter((x) => x.verdict === 'weak').map((x, i) => (
+                        <div key={i} className="small muted" style={{ marginTop: 4 }}>
+                          <strong>{x.c}:</strong> {x.note}
+                        </div>))}
+                    </div>)}
                   {(proposal.pieces || []).length > 0 && (
                     <div className="small">
                       <strong>Pieces it sells:</strong>{' '}

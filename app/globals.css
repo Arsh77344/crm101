@@ -264,6 +264,7 @@ option{background:var(--panel);color:var(--ink)}
 .cal .ev.ig{background:var(--accent-wash);color:var(--accent)}
 .cal .ev.em{background:var(--info-wash);color:var(--info)}
 .cal .ev.wa{background:var(--pos-wash);color:var(--pos)}
+.cal .ev.occ{background:var(--warn-wash);color:var(--warn);font-weight:500}
 
 /* ============ charts ============ */
 .bar{height:5px;border-radius:99px;background:var(--line-2);overflow:hidden}
