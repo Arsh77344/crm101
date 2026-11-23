@@ -3,7 +3,7 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@/lib/db';
 import { Page, Badge, Loading, ErrorNote, when } from '@/components/ui';
-import { loadOccasions, covers, iso, runUp, spanLabel } from '@/lib/occasions';
+import { loadOccasions, covers, runUp, spanLabel, worthMentioning } from '@/lib/occasions';
 
 const CHAN = { Instagram: 'ig', Email: 'em', WhatsApp: 'wa', Facebook: 'ig', SMS: 'wa' };
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -57,10 +57,7 @@ function Calendar() {
           {(() => {
             // What to act on, rather than what merely falls in view: an
             // occasion whose run-up has started or starts within the fortnight.
-            const soon = occasions
-              .filter((o) => ['on', 'soon'].includes(runUp(o).state))
-              .sort((a, b) => a.occasion_date.localeCompare(b.occasion_date))
-              .slice(0, 4);
+            const soon = worthMentioning(occasions);
             if (!soon.length) return null;
             return (
               <div className="note plain small" style={{ marginBottom: 14 }}>

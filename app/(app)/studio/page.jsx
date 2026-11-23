@@ -6,7 +6,7 @@ import { PROVIDERS, NO_KEYS, providerOption, firstWithKey, hasKey } from '@/lib/
 import { Page, Badge, Empty, Loading, ErrorNote, money, when } from '@/components/ui';
 import Dictate from '@/components/Dictate';
 import { executeCampaign } from '@/lib/execute';
-import { loadOccasions, runUp, spanLabel } from '@/lib/occasions';
+import { loadOccasions, runUp, spanLabel, worthMentioning } from '@/lib/occasions';
 
 async function agent(body) {
   const { data: { session } } = await sb().auth.getSession();
@@ -45,10 +45,7 @@ export default function Studio() {
   // What is coming up, shown beside the brief box. The agent reads the same
   // calendar from the database, so what the owner sees here is what it sees.
   const occ = useQuery(async (c) => loadOccasions(c), []);
-  const soon = (occ.data || [])
-    .filter((o) => ['on', 'soon'].includes(runUp(o).state))
-    .sort((a, b) => a.occasion_date.localeCompare(b.occasion_date))
-    .slice(0, 3);
+  const soon = worthMentioning(occ.data || [], 3);
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -262,8 +259,7 @@ export default function Studio() {
                 {soon.map((o, i) => (
                   <span key={o.occasion_id}>
                     {i ? ' · ' : ''}
-                    <button className="link" type="button"
-                      style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+                    <button className="link link-btn" type="button"
                       onClick={() => setDraft((cur) => (cur.trim()
                         ? `${cur.trim()} Build it around ${o.name}.`
                         : `A campaign for ${o.name}.`))}>
@@ -396,10 +392,10 @@ export default function Studio() {
                       <div className="row wrap" style={{ gap: 5, marginTop: 5 }}>
                         {proposal.six_cs.map((x, i) => (
                           <span key={i}
-                            className={`badge ${x.verdict === 'weak' ? 'b-amber' : 'b-green'}`}
+                            className={`badge ${x.verdict === 'met' ? 'b-green' : 'b-amber'}`}
                             title={x.note || ''}>{x.c}</span>))}
                       </div>
-                      {proposal.six_cs.filter((x) => x.verdict === 'weak').map((x, i) => (
+                      {proposal.six_cs.filter((x) => x.verdict !== 'met').map((x, i) => (
                         <div key={i} className="small muted" style={{ marginTop: 4 }}>
                           <strong>{x.c}:</strong> {x.note}
                         </div>))}
