@@ -34,6 +34,17 @@ SERVER=$!
 trap 'kill "$SERVER" 2>/dev/null; rm -rf "$SERVE"' EXIT
 sleep 2
 
+echo "--- every suite must be able to fail"
+blind=""
+for f in qa/*.py; do
+  case "$f" in */fixtures.py) continue;; esac       # a data module, not a suite
+  grep -q "sys.exit" "$f" || blind="$blind $(basename "$f")"
+done
+if [ -n "$blind" ]; then
+  echo "these report problems but exit 0, so they can never fail anything:$blind"
+  exit 1
+fi
+
 fail=0
 # A suite that fails prints its summary line and every problem under it, not
 # just whichever line happened to come last.
@@ -56,7 +67,7 @@ done
 echo "--- checks that drive the built site"
 for f in qa/test.py qa/nav.py qa/dashboard.py qa/details.py qa/looks.py qa/launch.py \
          qa/studio.py qa/courier.py qa/track.py qa/outreach.py qa/contrast.py \
-         qa/mobile.py qa/dictate.py qa/occasions.py; do
+         qa/mobile.py qa/dictate.py qa/occasions.py qa/social.py; do
   run_one "$f"
 done
 

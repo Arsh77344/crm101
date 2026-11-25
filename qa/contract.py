@@ -199,6 +199,35 @@ def main():
                     bad.append(f"{where}: {key} is a string, but {why} \u2014 wrap it "
                                f"in an array")
 
+    # A fourth seam: a guard the page trusts the function to enforce.
+    #
+    # The social page warns that a week's hashtags were never verified, based on
+    # the `searched` flag the function returns. The warning is worth nothing
+    # unless the function actually strips the tags -- a model told not to write
+    # hashtags will sometimes write them anyway, and an invented tag is the one
+    # failure the owner cannot spot by reading. The browser suite stubs the
+    # function, so it cannot see this; it is checked here instead.
+    social = os.path.join(ROOT, "supabase", "functions", "social-agent", "index.ts")
+    if not os.path.exists(social):
+        bad.append("supabase/functions/social-agent is missing, but app/(app)/social reads it")
+    else:
+        fn = open(social, encoding="utf-8").read()
+        checked += 1
+        if not re.search(r"if \(!wantSearch\)\s*\{", fn):
+            bad.append("social-agent does not strip hashtags when it could not search, so an "
+                       "unverified tag can reach a post")
+        else:
+            guard = fn[fn.index("if (!wantSearch) {"):][:600]
+            if 'hashtags: ""' not in guard:
+                bad.append("social-agent's no-search guard does not clear the hashtags")
+            if "d.research = []" not in guard:
+                bad.append("social-agent's no-search guard leaves research behind that was "
+                           "never actually looked up")
+        checked += 1
+        if "searched: wantSearch" not in fn:
+            bad.append("social-agent does not tell the page whether it searched, so the page "
+                       "cannot warn about unverified tags")
+
     seen, uniq = set(), []
     for b in bad:
         if b not in seen:

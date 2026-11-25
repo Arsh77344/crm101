@@ -94,3 +94,8 @@ def run(theme):
 probs = [f"[dark] {x}" for x in run("dark")] + [f"[light] {x}" for x in run("light")]
 print(f"=== field contrast: {len(probs)} problem(s) ===")
 for p in sorted(set(probs)): print("  " + p)
+
+# A check that reports a problem and exits 0 cannot fail anything: a runner, a
+# hook or CI all read the exit code, not the words. Eleven of these suites were
+# written that way and `qa/run.sh` said "all clear" over a red one.
+sys.exit(1 if probs else 0)

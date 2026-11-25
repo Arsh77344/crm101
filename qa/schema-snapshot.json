@@ -168,7 +168,9 @@
    "created_at",
    "art_direction",
    "cta",
-   "placement"
+   "placement",
+   "plan_id",
+   "hashtag_note"
   ],
   "campaign_threads": [
    "thread_id",
@@ -768,6 +770,22 @@
    "public_enabled",
    "created_at"
   ],
+  "social_plans": [
+   "plan_id",
+   "title",
+   "market",
+   "starts_on",
+   "days",
+   "status",
+   "occasion_id",
+   "say",
+   "research",
+   "replies",
+   "provider",
+   "model",
+   "created_at",
+   "created_by"
+  ],
   "stock_moves": [
    "move_id",
    "product_id",
@@ -841,6 +859,7 @@
   "campaign_messages>campaign_threads",
   "campaign_posts>campaigns",
   "campaign_posts>products",
+  "campaign_posts>social_plans",
   "campaign_threads>campaigns",
   "campaign_threads>occasions",
   "campaigns>campaign_threads",
@@ -896,6 +915,7 @@
   "showroom_views>showrooms",
   "showrooms>companies",
   "showrooms>contacts",
+  "social_plans>occasions",
   "stock_moves>orders",
   "stock_moves>products",
   "stock_moves>supplier_orders",

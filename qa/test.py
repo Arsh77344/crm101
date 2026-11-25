@@ -8,7 +8,7 @@ BASE = os.environ.get("QA_BASE", "http://127.0.0.1:9804/crm101")
 ROUTES = ["/agents", "/brands", "/payables","/", "/products", "/collections", "/launch", "/orders", "/shipments", "/payments",
           "/returns", "/showrooms", "/contacts", "/companies", "/pipeline", "/journey",
           "/activities", "/campaigns", "/generate", "/calendar", "/performance", "/links",
-          "/looks", "/studio", "/outreach", "/templates", "/broadcasts", "/analytics", "/consent", "/suppliers", "/expenses",
+          "/looks", "/studio", "/social", "/occasions", "/outreach", "/templates", "/broadcasts", "/analytics", "/consent", "/suppliers", "/expenses",
           "/finance", "/tasks", "/automations", "/integrations", "/team", "/settings"]
 
 USER = {"id": "11111111-1111-1111-1111-111111111111", "email": "owner@test.local",
@@ -93,3 +93,8 @@ probs = run(mode)
 print(f"=== {mode}: {len(probs)} problem(s) across {len(ROUTES)} routes ===")
 for r, p in probs:
     print(f"  {r:<16} {p}")
+
+# A check that reports a problem and exits 0 cannot fail anything: a runner, a
+# hook or CI all read the exit code, not the words. Eleven of these suites were
+# written that way and `qa/run.sh` said "all clear" over a red one.
+sys.exit(1 if probs else 0)
