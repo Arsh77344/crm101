@@ -2,7 +2,7 @@
 
     bash qa/run.sh
 
-Seventeen checks. Three read the source; fourteen drive a real build in a
+Eighteen checks. Four read the source; fourteen drive a real build in a
 headless browser. Nothing here touches the live Supabase project and none of
 them needs a key: the browser suites intercept every request to
 `stub.supabase.co` and answer with fixtures, which is why `run.sh` builds with
@@ -16,6 +16,7 @@ Reading the source:
 |---|---|
 | `schema.py` | every column and join the app asks Postgres for, against a snapshot of the real schema. Written after the dashboard asked for `order_items.units`, which has never existed. Refresh the snapshot after a migration — the query is in the file. |
 | `parts.py` | the part labels the browser offers for a piece are the ones the launch function knows how to read. |
+| `reshoot.py` | the loop that re-shoots a rejected frame: that it feeds the rejection back, that it stops, and that a frame which passes first time costs one generation. It asserts the loop in the edge function still has the shape its cases assume, because a transliterated rule that drifts from the code tests nothing. |
 | `contract.py` | three seams where the browser and an edge function have to agree: fields read off a reply against what the function returns, fields read off a stored proposal against the shape it declares, and the shape of config a page hands a shared component. |
 
 Driving the site:

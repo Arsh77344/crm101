@@ -59,6 +59,11 @@ export default function Launch() {
   const [research, setResearch] = useState(null);
   const [bulk, setBulk] = useState(false);
   const [made, setMade] = useState([]);
+  // Which frame the owner is redoing, and what they want changed about it.
+  const [redo, setRedo] = useState(null);
+  // The frame the run anchored its scene to. Held so that redoing one shot
+  // later keeps the same place rather than starting a new shoot.
+  const [runAnchor, setRunAnchor] = useState(null);
   const [unsure, setUnsure] = useState([]);
   const enlarge = useLightbox();
 
@@ -209,7 +214,10 @@ export default function Launch() {
           anchor_url: chain ? anchorUrl : null,
           images: shots.map((s) => s.url), parts: shots.map((s) => s.part || 'Unlabelled'),
         });
-        if (chain && !anchorUrl && out.anchor_url) anchorUrl = out.anchor_url;
+        if (chain && !anchorUrl && out.anchor_url) {
+          anchorUrl = out.anchor_url;
+          setRunAnchor(anchorUrl);
+        }
         setMade((m) => [...m, ...(out.images || []).map((i) => ({ ...i, use: true }))]);
         (out.failed || []).forEach((f) => trouble.push(`${mode}: ${f}`));
       } catch (e2) {
@@ -217,6 +225,49 @@ export default function Launch() {
       }
     }
     if (trouble.length) setErr(trouble.join(' · '));
+    setThinking('');
+  }
+
+  // One frame again, with one change. Everything that made it what it is comes
+  // back off the stored row -- the style, the camera angle, the set, the look --
+  // so the only difference is what the owner typed. The old frame is kept and
+  // set aside rather than deleted, so the two can be compared.
+  async function redoOne() {
+    const target = made.find((m) => m.path === redo?.path);
+    const said = String(redo?.text ?? '').trim();
+    if (!target || !said) return;
+    setThinking('images'); setErr('');
+    try {
+      const out = await assist({
+        action: 'images', provider: 'gemini', mode: target.mode, count: 1,
+        look_id: target.look_id || null,
+        set_id: target.set_id || null,
+        cutout_on_white: imagery.cutout_on_white, check: imagery.check,
+        // The function's own angle rotation is skipped when an angle is given,
+        // so the camera stays where it was and only the change moves.
+        angles: target.shot_angle ? [target.shot_angle] : null,
+        // The run's direction still holds; this is said after it, so it reads
+        // as the correction.
+        tweak: [imagery.tweak, said].map((x) => String(x || '').trim())
+          .filter(Boolean).join(' '),
+        piece,
+        // The scene the run settled on, or this frame itself when there was
+        // none -- either way the place does not change underneath him.
+        anchor_url: runAnchor || target.url,
+        images: shots.map((s) => s.url), parts: shots.map((s) => s.part || 'Unlabelled'),
+      });
+      const fresh = (out.images || []).map((i) => ({ ...i, use: true }));
+      if (!fresh.length) {
+        throw new Error((out.failed || [])[0] || 'Nothing came back from that one.');
+      }
+      setMade((m) => [
+        ...m.map((x) => (x.path === target.path ? { ...x, use: false } : x)),
+        ...fresh,
+      ]);
+      setRedo(null);
+    } catch (e2) {
+      setErr(e2.message || String(e2));
+    }
     setThinking('');
   }
 
@@ -702,12 +753,73 @@ export default function Launch() {
                                 onClick={() => setMade((xs) => xs.map((x) =>
                                   x.path === m.path ? { ...x, use: !x.use } : x))}
                                 style={{ right: 'auto', left: 4 }}>{m.use ? '✓' : '+'}</button>
+                              {/* The third corner. The shared rule puts a tile's
+                                  button top-right and the keep button overrides
+                                  to top-left, so this one takes the bottom. */}
+                              <button type="button" title="Redo this one with a change"
+                                disabled={Boolean(thinking)}
+                                onClick={() => setRedo({ path: m.path, text: '' })}
+                                style={{ top: 'auto', bottom: 4 }}>↻</button>
+                              {m.attempts > 1 && (!m.check || m.check.match) && (
+                                <span className="badge b-amber"
+                                  style={{ position: 'absolute', bottom: 4, left: 4,
+                                           fontSize: 10, padding: '1px 5px' }}
+                                  title={`Rejected ${m.attempts - 1} time${
+                                    m.attempts === 2 ? '' : 's'} and corrected before this one passed`}>
+                                  {m.attempts} tries
+                                </span>)}
                               {m.check && !m.check.match && (
-                                <span className="shot-flag" title={m.check.differences.join(' · ')}>
+                                <span className="shot-flag" title={m.check.differences.join(' · ')}
+                                  style={{ paddingRight: 26 }}>
                                   Does not match
                                 </span>)}
                             </div>))}
                         </div>
+
+                        {redo && (() => {
+                          const target = made.find((m) => m.path === redo.path);
+                          if (!target) return null;
+                          const which = target.look_name
+                            ? `the editorial frame (${target.look_name})`
+                            : `the ${String(target.mode).toLowerCase()} frame`;
+                          return (
+                            <div className="field" data-redo style={{ marginTop: 12 }}>
+                              <label>
+                                What should change about {which}?
+                                {target.shot_angle
+                                  ? <span className="faint"> — {target.shot_angle}</span>
+                                  : null}
+                              </label>
+                              <textarea value={redo.text} style={{ minHeight: 52 }}
+                                placeholder="Her hand lower. Warmer light. Lose the flowers."
+                                onChange={(e) => setRedo({ ...redo, text: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                    e.preventDefault(); redoOne();
+                                  }
+                                }} />
+                              <Dictate compact
+                                onText={(f) => setRedo((r) => ({ ...r, text: f(r.text) }))} />
+                              <div className="row" style={{ gap: 7, marginTop: 7 }}>
+                                <button className="btn btn-primary btn-sm" onClick={redoOne}
+                                  disabled={!redo.text.trim() || Boolean(thinking)}>
+                                  {thinking === 'images' ? 'Shooting…' : 'Redo this shot'}
+                                </button>
+                                <button className="btn btn-ghost btn-sm" type="button"
+                                  onClick={() => setRedo(null)} disabled={Boolean(thinking)}>
+                                  Cancel
+                                </button>
+                              </div>
+                              <span className="hint">
+                                The same style, the same camera and the same scene as before — only
+                                what you say here changes. It can move the light, the background, the
+                                props, the styling and the pose, but not the garment: the colour,
+                                weave, border and motifs stay matched to your photographs. The frame
+                                you are redoing is kept and set aside, not deleted, so you can
+                                compare the two and drop whichever you like less.
+                              </span>
+                            </div>);
+                        })()}
 
                         {made.some((m) => m.check && !m.check.match) && (
                           <div className="note warn small" style={{ marginTop: 10 }}>
@@ -720,6 +832,16 @@ export default function Launch() {
                                 </li>))}
                             </ul>
                             Drop them and generate again rather than selling from them.
+                          </div>)}
+                        {made.some((m) => (m.attempts || 1) > 1) && (
+                          <div className="note good small" style={{ marginTop: 10 }}>
+                            <strong>
+                              {made.filter((m) => (m.attempts || 1) > 1).length} of {made.length}
+                              {' '}needed re-shooting.
+                            </strong>{' '}
+                            Each was read back against your photographs, rejected, and shot again
+                            with what was wrong fed in as corrections. Only the frame that passed
+                            was kept — the rejected attempts were never stored.
                           </div>)}
                         <div className="note plain small" style={{ marginTop: 10 }}>
                           These are renderings made from your photographs, not photographs of the piece.

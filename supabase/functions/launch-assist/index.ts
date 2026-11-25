@@ -28,7 +28,26 @@ const MODELS: Record<string, string> = {
 };
 const GROQ_SEARCH = Deno.env.get("GROQ_SEARCH_MODEL") || "groq/compound";
 const GROQ_MAX = Math.max(256, Number(Deno.env.get("GROQ_MAX_TOKENS") || 900));
-const IMAGE_MODEL = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-nano-banana-2.1";
+// Nano Banana Pro. Chosen over the flash tier for three checked reasons: it is
+// the reference-fidelity model of the family, it is the only one that honours a
+// resolution request (flash silently returns ~1K whatever you ask for), and
+// Google bills 1K and 2K at the same 1,120 output tokens -- so 2K is free. It
+// costs roughly twice a flash generation, which the retry loop below earns back
+// the first time it saves a wasted frame.
+const IMAGE_MODEL = Deno.env.get("GEMINI_IMAGE_MODEL") || "gemini-3-pro-image";
+// 1K, 2K or 4K. 2K is the default because it costs what 1K costs. 4K doubles
+// the output tokens and a catalogue shot gains little from it.
+const IMAGE_SIZE = Deno.env.get("GEMINI_IMAGE_SIZE") || "2K";
+// A saree is tall. 3:4 also matches the tile the owner reviews these in.
+const IMAGE_ASPECT = Deno.env.get("GEMINI_IMAGE_ASPECT") || "3:4";
+// Low on purpose. This is a copying job, not a creative one: temperature is
+// what makes a model invent a motif rather than reproduce the one it was shown.
+const IMAGE_TEMP = Number(Deno.env.get("GEMINI_IMAGE_TEMPERATURE") || 0.35);
+// How many times one frame may be re-shot when the check rejects it. The
+// rejection's own words go back in as corrections, so attempt two is informed
+// rather than another roll of the dice. Only the frame that is kept is ever
+// uploaded, so a rejected attempt costs a generation and nothing else.
+const MAX_ATTEMPTS = Math.max(1, Math.min(4, Number(Deno.env.get("IMAGE_ATTEMPTS") || 3)));
 // The check reads two photographs closely and decides whether a customer would
 // feel misled. That is worth a stronger model than the writing steps use.
 const CHECK_MODEL = Deno.env.get("GEMINI_CHECK_MODEL") || Deno.env.get("GEMINI_MODEL")
@@ -46,6 +65,15 @@ const PROVIDERS = ["openai", "gemini", "anthropic", "groq", "nvidia"];
 // border in another, a macro of the field. Up to this many go to the model in one
 // call, in the order the owner uploaded them, each named by its kind's part list.
 const MAX_SOURCES = 4;
+
+// The image model takes up to fourteen reference images at 560 input tokens
+// each, and the single cheapest thing that can be done for fidelity is to show
+// it more of the real piece. Ten, not fourteen, because the sources are
+// base64-encoded in memory here and the function has a budget: the cap below
+// stops a set of large photographs from exhausting it.
+const MAX_IMAGE_SOURCES = Math.max(1, Math.min(14,
+  Number(Deno.env.get("IMAGE_SOURCE_COUNT") || 10)));
+const MAX_IMAGE_SOURCE_BYTES = 12_000_000;
 
 // What differs between the kinds of article the brand sells. Everything else in
 // this file is about photography and holds whatever is in front of the camera.
@@ -743,7 +771,17 @@ async function oneImage(instruction: string, sources: Inline[]) {
     `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent`,
     { method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": KEYS.gemini },
-      body: JSON.stringify({ contents: [{ role: "user", parts }] }) });
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          // TEXT as well as IMAGE: the model sometimes says why it refused, and
+          // the error path below reads that back to the owner instead of a
+          // bare failure.
+          responseModalities: ["TEXT", "IMAGE"],
+          imageConfig: { aspectRatio: IMAGE_ASPECT, imageSize: IMAGE_SIZE },
+          temperature: IMAGE_TEMP,
+        },
+      }) });
   const b = await res.json();
   if (!res.ok) {
     const m = b?.error?.message || `Gemini returned ${res.status}.`;
@@ -804,6 +842,53 @@ The last photograph is the generated one. Does the ${kind.whole} in it match the
            differences: Array.isArray(out.differences) ? out.differences.slice(0, 4) : [] };
 }
 
+// What went wrong last time, handed back as instructions. This is the whole
+// point of checking a frame: a rejection that only flags the image makes the
+// owner redo it blind, and a rejection fed back as corrections makes the next
+// attempt a correction rather than another guess.
+function correctionBlock(differences: unknown[], attempt: number) {
+  const list = (differences ?? []).map((d) => String(d ?? "").trim()).filter(Boolean);
+  if (!list.length) return "";
+  return `\n\nTHIS IS ATTEMPT ${attempt}. The last attempt was read back against the owner's own
+photographs and rejected, because the garment came out wrong in these ways:
+${list.map((d) => `- ${d}`).join("\n")}
+
+Put exactly those right and change nothing else: the same shot, the same framing, the same place,
+the same light. Where this attempt and the owner's photographs disagree about the garment, the
+photographs are right and you are wrong. Look at them again before you start.`;
+}
+
+// One frame, re-shot until the check accepts it or the attempts run out.
+//
+// Only the frame that is kept is ever uploaded. A rejected attempt costs one
+// generation and no storage, which is the difference between a wasted frame and
+// a wasted frame the owner also has to notice, delete and ask for again.
+async function shootOne(instruction: string, payload: Inline[], sources: Inline[],
+                        parts: unknown, kind: Kind, wantCheck: boolean) {
+  const limit = wantCheck ? MAX_ATTEMPTS : 1;
+  let kept: { img: { data: string; mime: string }; verdict: any } | null = null;
+  for (let attempt = 1; attempt <= limit; attempt++) {
+    const note = kept?.verdict?.differences
+      ? correctionBlock(kept.verdict.differences, attempt)
+      : "";
+    const img = await oneImage(instruction + note, payload);
+    if (!wantCheck) return { img, verdict: null, attempts: attempt };
+    const verdict = await checkOne(sources, img, parts, kind).catch((e) => ({
+      match: true, confidence: "unchecked",
+      differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`],
+    }));
+    kept = { img, verdict };
+    // An unchecked frame is not a rejected one: there is nothing to correct, so
+    // re-shooting it would spend the owner's money to learn nothing.
+    if (verdict.match || verdict.confidence === "unchecked") {
+      return { img, verdict, attempts: attempt };
+    }
+  }
+  // Every attempt was rejected. The last one is kept and flagged, so the owner
+  // sees what the check objected to rather than an empty run.
+  return { img: kept!.img, verdict: kept!.verdict, attempts: limit };
+}
+
 async function store(admin: any, folder: string, label: string, i: number,
                      made: { data: string; mime: string }, extra: Record<string, unknown>) {
   const ext = made.mime.includes("jpeg") ? "jpg" : "png";
@@ -839,6 +924,9 @@ Deno.serve(async (req) => {
       anthropic: Boolean(KEYS.anthropic), groq: Boolean(KEYS.groq), nvidia: Boolean(KEYS.nvidia),
       models: { ...MODELS, groq_search: GROQ_SEARCH }, groq_max_tokens: GROQ_MAX,
       image_model: IMAGE_MODEL, check_model: CHECK_MODEL,
+      image_size: IMAGE_SIZE, image_aspect: IMAGE_ASPECT,
+      image_temperature: IMAGE_TEMP, image_attempts: MAX_ATTEMPTS,
+      image_sources: MAX_IMAGE_SOURCES,
       sets: Object.keys(SETS).map((id) => ({ id, name: SET_NAME[id], line: SETS[id] })),
       images_ready: Boolean(KEYS.gemini),
       brand_set: Boolean(settings.brand_name && settings.brand_sells),
@@ -876,7 +964,7 @@ Deno.serve(async (req) => {
       if (!p.reference_url) return json({ error: "Give the reference image first." }, 400);
       const seen = await admin.from("looks").select("category")
         .not("category", "is", null).limit(300);
-      const known = [...new Set((seen.data ?? [])
+      const known: string[] = [...new Set<string>((seen.data ?? [])
         .map((r: any) => String(r.category ?? "").trim()).filter(Boolean))].sort();
       out = await ask(provider, LOOK_RULES(known), "Break this reference down.",
                       [p.reference_url], false);
@@ -936,8 +1024,18 @@ Deno.serve(async (req) => {
       const scene = setBlock(setLine, mode, p.cutout_on_white !== false, matchLook);
 
       const count = Math.max(1, Math.min(4, Number(p.count) || 1));
+      // As many of the owner's own photographs as the budget allows. The more
+      // of the real piece the model can see, the less of it it has to invent.
       const sources: Inline[] = [];
-      for (const u of images.slice(0, MAX_SOURCES)) sources.push(await asInline(u));
+      let sourceBytes = 0;
+      for (const u of images.slice(0, MAX_IMAGE_SOURCES)) {
+        const im = await asInline(u);
+        // Rough: base64 is about four bytes for every three of the original.
+        const cost = Math.ceil(im.data.length * 0.75);
+        if (sources.length && sourceBytes + cost > MAX_IMAGE_SOURCE_BYTES) break;
+        sources.push(im);
+        sourceBytes += cost;
+      }
 
       // A frame from earlier in this same run. A white cut-out is deliberately
       // not of the scene, so it never takes one.
@@ -954,24 +1052,26 @@ Deno.serve(async (req) => {
       const failed: string[] = [];
 
       if (editorial) {
-        let firstShot: Inline | null = null;
+        // An anchor from earlier in the run stands in as the first frame, so a
+        // single editorial frame regenerated on its own keeps the location, the
+        // woman and the light of the shoot it belongs to. Without this a redo of
+        // one frame starts a new scene, which is the opposite of what anchoring
+        // is for.
+        let firstShot: Inline | null = anchor;
         for (let i = 0; i < count; i++) {
           const angle = angleFor(i, p.angles, kind);
           try {
             const instruction = editorialInstruction(look, angle, p.piece,
-                                                     i === 0 || !firstShot, p.tweak,
+                                                     (i === 0 && !anchor) || !firstShot,
+                                                     p.tweak,
                                                      p.parts, sources.length, kind);
             const withPrev = firstShot ? [...sources, firstShot] : sources;
-            const img = await oneImage(instruction, withPrev);
+            const { img, verdict, attempts } = await shootOne(
+              instruction, withPrev, sources, p.parts, kind, wantCheck);
             if (!firstShot) firstShot = { mime: img.mime, data: img.data };
-            const verdict = wantCheck
-              ? await checkOne(sources, img, p.parts, kind).catch((e) => ({
-                  match: true, confidence: "unchecked",
-                  differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`] }))
-              : null;
             made.push(await store(admin, folder, "editorial", i, img,
               { mode, shot_angle: angle, look_id: look.look_id, look_name: look.name,
-                set_id: null, check: verdict }));
+                set_id: null, check: verdict, attempts }));
           } catch (e) {
             failed.push(e instanceof Error ? e.message : String(e));
           }
@@ -982,9 +1082,12 @@ Deno.serve(async (req) => {
           }).eq("look_id", look.look_id);
         }
       } else {
+        // Each frame is shot, checked and re-shot on its own, and the frames run
+        // alongside each other. A rejected frame corrects itself without holding
+        // up the others.
         const results = await Promise.allSettled(
           Array.from({ length: count }, (_, i) =>
-            oneImage(`${shots[mode]}${assemble}${scene}${anchor ? anchorBlock(mode) : ""}`
+            shootOne(`${shots[mode]}${assemble}${scene}${anchor ? anchorBlock(mode) : ""}`
               + ((mode === "Clean" && p.cutout_on_white !== false)
                 ? ""
                 : (mode === "Clean" || mode === "Detail" || mode === "Fabric")
@@ -1004,7 +1107,8 @@ Deno.serve(async (req) => {
                   : `\n\nCamera: ${angleFor(i, p.angles, kind)}`)
               + `\n\nWhat the piece is:\n`
               + (describe(p.piece ?? {}, "") || "Not described.") + tweakBlock(p.tweak),
-              anchor ? [...sources, anchor] : sources)));
+              anchor ? [...sources, anchor] : sources,
+              sources, p.parts, kind, wantCheck)));
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
           if (r.status === "rejected") {
@@ -1012,17 +1116,13 @@ Deno.serve(async (req) => {
             continue;
           }
           try {
-            const verdict = wantCheck
-              ? await checkOne(sources, r.value, p.parts, kind).catch((e) => ({
-                  match: true, confidence: "unchecked",
-                  differences: [`Could not check this one: ${e instanceof Error ? e.message : e}`] }))
-              : null;
-            made.push(await store(admin, folder, mode.toLowerCase(), i, r.value,
+            const { img, verdict, attempts } = r.value;
+            made.push(await store(admin, folder, mode.toLowerCase(), i, img,
               { mode, shot_angle: mode === "Detail" ? "Close macro of the cloth"
                         : angleFor(i, p.angles, kind),
                 look_id: matchLook ? look.look_id : null,
                 look_name: matchLook ? look.name : null,
-                set_id: p.set_id ?? null, check: verdict }));
+                set_id: p.set_id ?? null, check: verdict, attempts }));
           } catch (e) { failed.push(e instanceof Error ? e.message : String(e)); }
         }
       }

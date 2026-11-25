@@ -67,6 +67,11 @@ def run():
                         {"url": "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
                          "path": f"generated/{body.get('mode')}-{i}.png", "bytes": 10,
                          "mode": body.get("mode"), "shot_angle": f"angle {i}",
+                         "set_id": body.get("set_id"), "look_id": body.get("look_id"),
+                         # The Model frame's first image is the one the stub
+                         # rejects, so it stands for a frame that was re-shot.
+                         "attempts": 2 if (body.get("mode") == "Model" and i == 1) else 1,
+                         "look_name": "Ghat at dusk" if body.get("mode") == "Editorial" else None,
                          "check": {"match": body.get("mode") != "Model" or i != 0,
                                    "confidence": "high",
                                    "differences": [] if (body.get("mode") != "Model" or i != 0)
@@ -266,6 +271,90 @@ def run():
             bad.append("no warning that some images do not match the photographs")
         elif "border is wider" not in body_now:
             bad.append("the warning does not say what differed")
+
+        # 4a. a frame that had to be re-shot says so, and the run says how many.
+        # This is what the owner is paying for when a frame is rejected, so it is
+        # not allowed to happen silently.
+        body_before = pg.inner_text("body")
+        tries = pg.query_selector_all(".shot .badge.b-amber")
+        if not tries:
+            bad.append("a frame that took more than one attempt does not say so")
+        elif "2 tries" not in " ".join(t.inner_text() for t in tries):
+            bad.append(f"the attempt count is not shown: "
+                       f"{[t.inner_text() for t in tries]}")
+        if "needed re-shooting" not in body_before:
+            bad.append("the run does not say how many frames had to be re-shot")
+        if "never stored" not in body_before:
+            bad.append("the run does not say the rejected attempts were not kept")
+
+        # 4b. one frame redone with a short note. Everything that made the frame
+        # what it is has to come back unchanged -- the style, the camera, the set,
+        # the look and the scene -- or the "redo" is really a different shot.
+        sent["image_calls"].clear()
+        redo_btns = pg.query_selector_all('.shot button[title*="Redo"]')
+        kept_before = len(pg.query_selector_all(".shot"))
+        if len(redo_btns) != kept_before:
+            bad.append(f"{len(redo_btns)} redo buttons across {kept_before} frames; "
+                       f"every generated frame should offer one")
+        if not redo_btns:
+            bad.append("no way to redo a single frame")
+        else:
+            # Which frame we are redoing, read off the page before pressing.
+            first = pg.query_selector(".shot")
+            redo_btns[0].click()
+            pg.wait_for_timeout(300)
+            panel = pg.query_selector("[data-redo]")
+            if not panel:
+                bad.append("pressing redo opens nothing")
+            else:
+                said = panel.inner_text()
+                if "What should change" not in said:
+                    bad.append(f"the redo panel does not ask what to change: {said[:80]}")
+                if "angle" not in said:
+                    bad.append("the redo panel does not say which frame it is redoing")
+                # Nothing to send until something is typed.
+                go = panel.query_selector("button.btn-primary")
+                if not go.is_disabled():
+                    bad.append("the redo button is live with an empty prompt")
+                pg.fill("[data-redo] textarea", "Warmer light, and lose the flowers.")
+                pg.wait_for_timeout(150)
+                if go.is_disabled():
+                    bad.append("the redo button stays dead after a prompt is typed")
+                go.click()
+                pg.wait_for_timeout(1800)
+
+                calls = sent["image_calls"]
+                if len(calls) != 1:
+                    bad.append(f"redoing one frame made {len(calls)} calls, expected 1")
+                else:
+                    c = calls[0]
+                    if c.get("count") != 1:
+                        bad.append(f"the redo asked for {c.get('count')} images, expected 1")
+                    if c.get("angles") != ["angle 0"]:
+                        bad.append(f"the redo sent angles {c.get('angles')}, expected the "
+                                   f"frame's own angle so the camera does not move")
+                    if not c.get("anchor_url"):
+                        bad.append("the redo sent no anchor, so the scene can change under him")
+                    tweak = str(c.get("tweak") or "")
+                    if "lose the flowers" not in tweak.lower():
+                        bad.append(f"the redo did not carry what was typed: {tweak!r}")
+                    if not c.get("mode"):
+                        bad.append("the redo did not say which style of frame it is")
+                    if len(c.get("images") or []) != 3:
+                        bad.append("the redo did not send the owner's own photographs")
+
+                # The frame redone is set aside, not deleted, and the new one kept.
+                pg.wait_for_timeout(200)
+                keeps = pg.eval_on_selector_all(
+                    ".shot button[style*='left']", "e => e.map(x => x.textContent.trim())")
+                if keeps.count("+") < 1:
+                    bad.append("the frame that was redone is still marked kept; "
+                               "it should be set aside so the two can be compared")
+                if len(pg.query_selector_all(".shot")) <= kept_before:
+                    bad.append("the redone frame replaced the old one instead of "
+                               "arriving beside it")
+                if pg.query_selector("[data-redo]"):
+                    bad.append("the redo panel stayed open after it ran")
 
         # 5. the copy call is told the parts too
         for c in sent.get("copy", []):

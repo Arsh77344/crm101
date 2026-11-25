@@ -49,7 +49,7 @@ run_one() {
 }
 
 echo "--- checks that read the source, no browser"
-for f in qa/schema.py qa/parts.py qa/contract.py; do
+for f in qa/schema.py qa/parts.py qa/contract.py qa/reshoot.py; do
   run_one "$f"
 done
 
