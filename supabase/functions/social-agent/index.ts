@@ -63,7 +63,7 @@ async function brandContext(admin: any) {
 // What the agent may know. Everything else it has to ask for or leave out.
 async function workspace(admin: any) {
   const since = new Date(Date.now() - 45 * 86400000).toISOString();
-  const [products, posts, occasions, looks, templates, plans] = await Promise.all([
+  const [products, posts, occasions, looks, templates, plans, campaigns] = await Promise.all([
     admin.from("products")
       .select("product_id,public_product_name,category,fabric,colour,weave_or_motif,retail_price,"
         + "stock_qty,story,product_images(image_id,generated,is_primary),brands(name,city,story)")
@@ -81,11 +81,20 @@ async function workspace(admin: any) {
       .eq("provider_status", "Approved").limit(40),
     admin.from("social_plans").select("title,starts_on,days,market,status")
       .order("starts_on", { ascending: false }).limit(6),
+    // The campaigns themselves, not just the posts they produced. Reading the
+    // posts tells this agent what was said; reading the campaign tells it what
+    // the campaign is FOR -- and without that it can only avoid clashing with a
+    // campaign, never carry it.
+    admin.from("campaigns")
+      .select("campaign_id,campaign_name,objective,status,start_date,end_date,offer,brief,"
+        + "art_direction,audience_note,market,ad_plan")
+      .order("start_date", { ascending: false }).limit(8),
   ]);
   return {
     products: products.data ?? [], posts: posts.data ?? [],
     occasions: occasions.data ?? [], looks: looks.data ?? [],
     templates: templates.data ?? [], plans: plans.data ?? [],
+    campaigns: campaigns.data ?? [],
   };
 }
 
@@ -141,6 +150,57 @@ function occasionLines(w: any) {
   }).join("\n");
 }
 
+// A campaign that is running, or about to, changes this agent's job entirely:
+// the week stops being its own idea and becomes the drumbeat under the
+// campaign. The owner asked for exactly this -- what the campaign manager
+// decides should reach the social manager and get promoted -- and the spine is
+// the thing that has to carry across, not the posts.
+function campaignLines(w: any) {
+  const today = new Date().toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10);
+  const live = (w.campaigns ?? []).filter((c: any) => {
+    if (String(c.status ?? "").toLowerCase() === "ended") return false;
+    const a = c.start_date ?? "", b = c.end_date ?? "";
+    // Running now, or starting inside the next three weeks.
+    return (a <= today && (!b || b >= today)) || (a > today && a <= soon);
+  });
+  if (!live.length) {
+    const recent = (w.campaigns ?? []).slice(0, 2).map((c: any) =>
+      `- ${c.campaign_name} (${c.status}) ${c.start_date ?? "?"} to ${c.end_date ?? "?"}`)
+      .join("\n");
+    return `\nNo campaign is running or about to start, so this week is yours to decide.`
+      + (recent ? `\n\nThe last campaigns, for continuity — pick up a thread rather than
+starting from nothing:\n${recent}` : "");
+  }
+  const rows = live.map((c: any) => {
+    const spine = c.brief || c.audience_note || "";
+    const when = c.start_date && c.start_date > new Date().toISOString().slice(0, 10)
+      ? `starts ${c.start_date}` : `running now, to ${c.end_date ?? "no end set"}`;
+    return `- ${c.campaign_name} · ${c.objective ?? "no objective set"} · ${when}`
+      + (c.market ? ` · aimed at ${c.market}` : "")
+      + (spine ? `\n    what it is about: ${spine}` : "")
+      + (c.offer ? `\n    its offer: ${c.offer}` : "")
+      + (c.art_direction ? `\n    its art direction: ${c.art_direction}` : "")
+      + ` [campaign_id ${c.campaign_id}]`;
+  }).join("\n");
+  return `\nA CAMPAIGN IS IN PLAY. This changes what this week is for:
+${rows}
+
+Your week carries that campaign rather than competing with it. Say the same thing the campaign
+says, in the places and the register a feed uses rather than an advertisement: the campaign makes
+the argument, these posts make it familiar. Concretely:
+
+- Build the week on the campaign's own spine. Do not invent a second story running alongside it —
+  two stories in one week is how a small brand sounds confused.
+- Each post takes a different part of that spine, in the campaign's own art direction so the feed
+  and the campaign look like one thing.
+- Where the campaign has an offer, mention it plainly once across the whole week, not in every
+  post. A feed that repeats an offer reads as a sale.
+- Do not re-plan a day the campaign already has a post on — they are in the list of what has gone
+  out above. Fill the gaps between its posts, which is what keeps a campaign alive between beats.
+- Say in "say" which campaign you are carrying and how this week serves it.`;
+}
+
 function guardLines(settings: Record<string, string>, w: any) {
   const approved = (w.templates ?? []).filter((t: any) => /whats/i.test(t.channel ?? ""));
   const qs = settings.guard_quiet_start, qe = settings.guard_quiet_end;
@@ -162,6 +222,7 @@ const SHAPE = `{
   "say": string,
   "title": string,
   "occasion_id": string | null,
+  "carries_campaign": null | { "campaign_id": string, "name": string, "how": string },
   "research": [{
     "what": string, "found": string, "where": string,
     "kind": "hashtag" | "format" | "conversation" | "timing"
@@ -231,7 +292,8 @@ const VOICE = `HOW IT IS WRITTEN.
 - Captions run 25 to 70 words. Long enough to say something true, short enough to be read.`;
 
 const RULES = (brand: string, catalogue: string, recent: string, occasions: string,
-               guards: string, market: string, days: number, search: boolean) => `${brand}
+               guards: string, campaigns: string, market: string, days: number,
+               search: boolean) => `${brand}
 
 You run this brand's social media between campaigns. Not a campaign — the weekly drumbeat that
 keeps the feed alive and the content calendar full. You are talking to the owner, who will shoot
@@ -247,6 +309,8 @@ ${catalogue}
 What has gone out lately — do not repeat an idea that is already here, and do not reuse a piece
 that was the subject of a post in the last fortnight:
 ${recent}
+
+${campaigns}
 
 What is coming up, from the owner's own calendar:
 ${occasions}
@@ -434,7 +498,7 @@ Deno.serve(async (req) => {
     const said = String(p.brief ?? "").trim().slice(0, 2000);
 
     const system = RULES(brand, catalogueLines(w), recentLines(w), occasionLines(w),
-                         guardLines(settings, w), market, days, wantSearch);
+                         guardLines(settings, w), campaignLines(w), market, days, wantSearch);
     const out = await ask(provider, system,
       said || `Plan the next ${days} days.`, wantSearch);
     const d = out.data || {};
@@ -450,6 +514,10 @@ Deno.serve(async (req) => {
     d.research = (Array.isArray(d.research) ? d.research : []).slice(0, 20);
     d.replies = (Array.isArray(d.replies) ? d.replies : []).slice(0, 10);
     if (!knownOcc.has(d.occasion_id)) d.occasion_id = null;
+    const knownCamp = new Set(w.campaigns.map((x: any) => x.campaign_id));
+    if (!d.carries_campaign || !knownCamp.has(d.carries_campaign.campaign_id)) {
+      d.carries_campaign = null;
+    }
 
     // A plan that could not search has no business carrying hashtags, whatever
     // the model decided to write. This is enforced here rather than trusted to

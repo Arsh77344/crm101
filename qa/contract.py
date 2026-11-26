@@ -228,6 +228,34 @@ def main():
             bad.append("social-agent does not tell the page whether it searched, so the page "
                        "cannot warn about unverified tags")
 
+    # A fifth seam: agents that have to see each other's work.
+    #
+    # The owner's requirement in his own words -- what the campaign manager
+    # decides should reach the social manager and get promoted. That only works
+    # if each function actually queries the other's table, and nothing in a
+    # browser suite can see a missing query. A campaign agent blind to
+    # social_plans plans over a committed week; a social agent blind to
+    # campaigns can avoid clashing with one but never carry it.
+    PAIRS = [
+        ("social-agent", "campaigns",
+         "so a week can carry a live campaign instead of only avoiding it"),
+        ("social-agent", "campaign_posts",
+         "so it does not repeat a post that already went out"),
+        ("campaign-agent", "social_plans",
+         "so a campaign is not built over a week somebody already committed to"),
+        ("campaign-agent", "campaign_posts",
+         "so it can see which days already carry something"),
+    ]
+    for slug, table, why in PAIRS:
+        path = os.path.join(ROOT, "supabase", "functions", slug, "index.ts")
+        checked += 1
+        if not os.path.exists(path):
+            bad.append(f"supabase/functions/{slug} is missing")
+            continue
+        fn = open(path, encoding="utf-8").read()
+        if f'from("{table}")' not in fn:
+            bad.append(f"{slug} never reads {table}, {why}")
+
     seen, uniq = set(), []
     for b in bad:
         if b not in seen:

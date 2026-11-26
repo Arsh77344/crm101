@@ -50,6 +50,8 @@ PLAN = {
     {"question": "Can it reach Chennai by Friday?", "answer": "Tell us the pincode and we will check."},
   ],
   "needs_shooting": [{"product_id": "P2", "why": "Rose Tissue has no photographs yet."}],
+  "carries_campaign": {"campaign_id": "C1", "name": "Winter Wedding Test",
+                       "how": "Each post takes a different part of its spine."},
   "days": 7, "market": "Tamil Nadu",
 }
 
@@ -172,6 +174,21 @@ def run(searched=True):
             bad.append("the agent's own summary is not shown")
         if "Rose Tissue has no photographs" not in after:
             bad.append("a piece it wanted but could not shoot is not called out")
+
+        # The campaign the week is carrying has to be named and reachable, or
+        # the owner cannot tell a coordinated week from an invented one.
+        carries = pg.query_selector("[data-carries]")
+        if not carries:
+            bad.append("the week does not say which campaign it is carrying")
+        else:
+            said = carries.inner_text()
+            if PLAN["carries_campaign"]["name"] not in said:
+                bad.append(f"the carried campaign is not named: {said[:80]}")
+            if PLAN["carries_campaign"]["how"] not in said:
+                bad.append("the week does not say how it serves the campaign")
+            href = carries.query_selector("a").get_attribute("href")
+            if not href or PLAN["carries_campaign"]["campaign_id"] not in href:
+                bad.append(f"the carried campaign does not open ({href})")
         for r in PLAN["replies"]:
             if r["question"] not in after:
                 bad.append(f"the drafted reply to {r['question']!r} is missing")

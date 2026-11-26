@@ -232,6 +232,16 @@ function Social() {
                 <div className="card-body stack" style={{ gap: 9 }}>
                   {plan.say && <div className="small muted">{plan.say}</div>}
 
+                  {plan.carries_campaign?.name && (
+                    <div className="note small" data-carries>
+                      <strong>Carrying {plan.carries_campaign.name}.</strong>{' '}
+                      {plan.carries_campaign.how}{' '}
+                      <Link className="link"
+                        href={`/campaigns?id=${plan.carries_campaign.campaign_id}`}>
+                        Open the campaign
+                      </Link>
+                    </div>)}
+
                   {!searched && (
                     <div className="note warn small" data-unverified>
                       <strong>No hashtags on this week.</strong> It could not search, so nothing was

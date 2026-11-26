@@ -68,7 +68,8 @@ async function brandContext(admin: any) {
 // What the agent is allowed to know: the real catalogue, the real looks, what
 // the last campaigns actually did. Everything else it must ask for.
 async function workspace(admin: any) {
-  const [products, collections, looks, past, orders, occasions, templates] = await Promise.all([
+  const [products, collections, looks, past, orders, occasions, templates,
+         plans, booked] = await Promise.all([
     admin.from("products")
       .select("product_id,public_product_name,category,fabric,colour,weave_or_motif,retail_price,"
         + "stock_qty,status,story,description,"
@@ -93,6 +94,15 @@ async function workspace(admin: any) {
     // approved, so the agent may only plan around the ones that exist.
     admin.from("message_templates").select("name,channel,category,provider_status")
       .eq("provider_status", "Approved").limit(40),
+    // What the social agent has already planned. Without this a campaign gets
+    // built straight over a week somebody already committed to, and the owner
+    // finds out when two sets of posts land on the same days.
+    admin.from("social_plans").select("plan_id,title,starts_on,days,market,status,say")
+      .order("starts_on", { ascending: false }).limit(5),
+    // Days that already have something on them, campaign or always-on.
+    admin.from("campaign_posts").select("title,channel,placement,scheduled_for,status,plan_id")
+      .gte("scheduled_for", new Date().toISOString())
+      .order("scheduled_for").limit(60),
   ]);
   const p = products.data ?? [];
   const sold = (orders.data ?? []);
@@ -101,6 +111,7 @@ async function workspace(admin: any) {
     products: p, collections: collections.data ?? [], looks: looks.data ?? [],
     past: past.data ?? [],
     occasions: occasions.data ?? [], templates: templates.data ?? [],
+    plans: plans.data ?? [], booked: booked.data ?? [],
     trade: { orders: sold.length, revenue,
              average: sold.length ? Math.round(revenue / sold.length) : null },
   };
@@ -183,6 +194,40 @@ confirmed or fixed may be printed.`;
 // The workspace's own sending rules. An omni-channel plan that breaks them
 // cannot actually be run, so the agent is told them rather than being left to
 // invent a cadence.
+// What the always-on social side has already committed to. A campaign that
+// ignores it collides with it: two sets of posts on the same days, two stories
+// in one week, and the owner discovering both only when the calendar fills up.
+function calendarLines(w: any) {
+  const plans = (w.plans ?? []).filter((x: any) =>
+    String(x.status ?? "").toLowerCase() !== "cancelled");
+  const booked = w.booked ?? [];
+  if (!plans.length && !booked.length) {
+    return "\nThe content calendar ahead is empty, so this campaign has it to itself.";
+  }
+  const planRows = plans.slice(0, 4).map((x: any) =>
+    `- ${x.title} · ${x.days} days from ${x.starts_on} · ${x.status}`
+    + (x.market ? ` · ${x.market}` : "")).join("\n");
+  const byDay: Record<string, number> = {};
+  booked.forEach((p: any) => {
+    const d = String(p.scheduled_for ?? "").slice(0, 10);
+    if (d) byDay[d] = (byDay[d] ?? 0) + 1;
+  });
+  const days = Object.entries(byDay).slice(0, 21)
+    .map(([d, n]) => `${d} (${n})`).join(", ");
+  return `\nWHAT IS ALREADY ON THE CALENDAR. The social side plans the weeks between campaigns,
+and some of it is already committed:
+${planRows || "- no weeks planned"}
+${days ? `\nDays that already carry something: ${days}` : ""}
+
+Plan around it rather than over it:
+- Do not put a post on a day that already has two or more. Say in "say" where you had to move.
+- If a social week overlaps this campaign's window, that is not a clash to avoid — it is the
+  drumbeat under the campaign, and it will be rewritten to carry this campaign's spine once this
+  is approved. Say in "say" which weeks that will affect, so the owner knows to re-plan them.
+- Where a social week has a story of its own that this campaign contradicts, say so plainly. Two
+  stories running at once is the thing to avoid, and the owner decides which one survives.`;
+}
+
 function guardLines(settings: Record<string, string>, w: any) {
   const approved = (w.templates ?? []).filter((t: any) => /whats/i.test(t.channel ?? ""));
   const names = approved.map((t: any) => `"${t.name}" (${t.category})`).join(", ");
@@ -444,7 +489,8 @@ mark at least one weak unless the plan genuinely has no soft spot, and where you
 in that note what would fix it. The owner would rather read a real weakness than six ticks.`;
 
 const RULES = (brand: string, mode: string, catalogue: string, search: boolean,
-               market: string, occasions: string, guards: string) => `${brand}
+               market: string, occasions: string, guards: string,
+               calendar: string) => `${brand}
 
 You are this brand's campaign lead. You design one campaign at a time, in conversation with the
 owner, for Instagram, Facebook and Meta ads. You are talking to the person who owns the business
@@ -459,6 +505,7 @@ assumption inside your own text.
 
 ${catalogue}
 ${occasions}
+${calendar}
 
 ${STORY}
 ${marketBlock(market)}
@@ -740,7 +787,8 @@ Deno.serve(async (req) => {
 
     const out = await ask(provider,
                           RULES(brand, mode, catalogueLines(w), wantSearch, market,
-                                occasionLines(w), guardLines(settings, w)),
+                                occasionLines(w), guardLines(settings, w),
+                                calendarLines(w)),
                           history, wantSearch);
     const d = out.data || {};
 
