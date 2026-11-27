@@ -17,23 +17,30 @@ USER = {"id": "11111111-1111-1111-1111-111111111111", "email": "owner@test.local
 SESSION = {"access_token": "fake", "token_type": "bearer", "expires_in": 3600,
            "expires_at": 9999999999, "refresh_token": "fake", "user": USER}
 
-# The rows are positioned relative to this, so the fixture never goes stale.
-TODAY = dt.date.today()
-
-# The page computes its run-up from the browser's clock, so the expectations are
-# computed from that same clock rather than this one. The two agree except on a
-# run that straddles midnight, which is exactly when a date test should not start
-# failing for no reason.
+# One clock for the whole suite: the browser's. The page computes every run-up
+# from `new Date()`, so a fixture built from Python's clock is judged against a
+# different day whenever the two disagree -- which they do, and when they do a
+# row meant to be "today" lands in the past and silently drops out of every
+# filter the page applies. Read first, build second.
 BROWSER_TODAY = None
 
 
 def today():
-    return BROWSER_TODAY or TODAY
+    if BROWSER_TODAY is None:
+        raise RuntimeError("the browser's date has not been read yet")
+    return BROWSER_TODAY
+
+
+def read_browser_date(pg):
+    return dt.date.fromisoformat(pg.evaluate(
+        "() => { const d = new Date(); return `${d.getFullYear()}-`"
+        "+ String(d.getMonth() + 1).padStart(2, '0') + '-'"
+        "+ String(d.getDate()).padStart(2, '0'); }"))
 
 
 def row(name, days_away, lead_weeks, **kw):
-    """One occasion, positioned relative to today so the test never goes stale."""
-    day = TODAY + dt.timedelta(days=days_away)
+    """One occasion, positioned relative to the browser's today."""
+    day = today() + dt.timedelta(days=days_away)
     promote = day - dt.timedelta(days=lead_weeks * 7)
     r = {
         "occasion_id": name.lower().replace(" ", "-"),
@@ -49,26 +56,33 @@ def row(name, days_away, lead_weeks, **kw):
         # What the view would have returned for this row.
         "promote_from": promote.isoformat(),
         "days_away": days_away,
-        "days_until_promote": (promote - TODAY).days,
+        "days_until_promote": (promote - today()).days,
     }
     r.update(kw)
     return r
 
 
-# In its run-up now; starts in 9 days; a long way off; a season; no date yet.
-ON       = row("Deepavali Test", 10, 3)
-SOON     = row("Pongal Test", 30, 3)
-LATER    = row("Holi Test", 200, 3)
-SEASON   = row("Wedding Season Test", 5, 2,
-               until_date=(TODAY + dt.timedelta(days=25)).isoformat(),
-               kind="Wedding season")
-NODATE   = {**row("Karva Chauth Test", 0, 3), "occasion_id": "nodate",
-            "occasion_date": None, "promote_from": None,
-            "days_away": None, "days_until_promote": None}
-FIXED    = row("Makar Test", 60, 3, date_basis="Fixed")
+# Built once the browser's date is known: in its run-up now, starting in nine
+# days, a long way off, a season, one dated today so the month on screen always
+# has a marker on it, and one with no date at all.
+ROWS = {}
 
-VIEW_ROWS = [SEASON, ON, SOON, FIXED, LATER]          # the view drops the undated one
-TABLE_ROWS = [SEASON, ON, SOON, FIXED, LATER, NODATE]  # the table keeps it
+
+def build_fixture():
+    ROWS["today"] = row("Karthigai Test", 0, 3)
+    ROWS["on"] = row("Deepavali Test", 10, 3)
+    ROWS["soon"] = row("Pongal Test", 30, 3)
+    ROWS["later"] = row("Holi Test", 200, 3)
+    ROWS["season"] = row("Wedding Season Test", 5, 2,
+                         until_date=(today() + dt.timedelta(days=25)).isoformat(),
+                         kind="Wedding season")
+    ROWS["fixed"] = row("Makar Test", 60, 3, date_basis="Fixed")
+    ROWS["nodate"] = {**row("Karva Chauth Test", 0, 3), "occasion_id": "nodate",
+                      "occasion_date": None, "promote_from": None,
+                      "days_away": None, "days_until_promote": None}
+    ROWS["view"] = [ROWS["today"], ROWS["season"], ROWS["on"], ROWS["soon"],
+                    ROWS["fixed"], ROWS["later"]]        # the view drops the undated one
+    ROWS["table"] = ROWS["view"] + [ROWS["nodate"]]      # the table keeps it
 
 
 def expected_runup(r):
@@ -102,6 +116,16 @@ def run():
         b = pw.chromium.launch()
         ctx = b.new_context(viewport={"width": 1340, "height": 950})
 
+        # The clock first, on a blank page, then the fixture, then the stubs.
+        # The handler serves these rows, so they have to exist before any
+        # navigation -- and they have to be built from the date the page will
+        # actually judge them against.
+        global BROWSER_TODAY
+        probe = ctx.new_page()
+        BROWSER_TODAY = read_browser_date(probe)
+        probe.close()
+        build_fixture()
+
         def handler(route):
             u = route.request.url
             if "/auth/v1/user" in u:
@@ -116,8 +140,8 @@ def run():
                                      "can_search": {"gemini": True}}))
             t = (re.search(r"/rest/v1/([a-z_]+)", u) or [None, ""])[1]
             rows = {
-                "occasions_upcoming": VIEW_ROWS,
-                "occasions": TABLE_ROWS,
+                "occasions_upcoming": ROWS["view"],
+                "occasions": ROWS["table"],
                 "campaign_posts": [],
                 "campaign_threads": [],
                 "profiles": [{"id": USER["id"], "email": USER["email"],
@@ -137,25 +161,20 @@ def run():
         # ---------- the list page ----------
         pg.goto(BASE + "/occasions/", wait_until="networkidle", timeout=20000)
         pg.wait_for_timeout(700)
-        global BROWSER_TODAY
-        BROWSER_TODAY = dt.date.fromisoformat(pg.evaluate(
-            "() => { const d = new Date(); return `${d.getFullYear()}-`"
-            "+ String(d.getMonth() + 1).padStart(2, '0') + '-'"
-            "+ String(d.getDate()).padStart(2, '0'); }"))
         txt = pg.inner_text("body")
 
-        for r in TABLE_ROWS:
+        for r in ROWS["table"]:
             if r["name"] not in txt:
                 bad.append(f"{r['name']} is missing from the list")
 
         # 1. the run-up, against the rule implemented here
-        for r in TABLE_ROWS:
+        for r in ROWS["table"]:
             want = expected_runup(r)
             if want not in txt:
                 bad.append(f"{r['name']}: the run-up should read {want!r} and does not")
 
         # 2. the view and the page must agree on promote_from
-        for r in VIEW_ROWS:
+        for r in ROWS["view"]:
             day = dt.date.fromisoformat(r["occasion_date"])
             mine = (day - dt.timedelta(days=r["lead_weeks"] * 7)).isoformat()
             if mine != r["promote_from"]:
@@ -179,14 +198,14 @@ def run():
         # 6. The year shows on a date in another year and not on one in this
         # year. The shared when() prints the year on every other date column, so
         # a bare "15 Jan" on a calendar that is mostly next year reads undated.
-        next_year = [r for r in TABLE_ROWS
+        next_year = [r for r in ROWS["table"]
                      if r["occasion_date"]
                      and int(r["occasion_date"][:4]) != today().year]
         for r in next_year:
             if str(int(r["occasion_date"][:4])) not in txt:
                 bad.append(f"{r['name']} is in {r['occasion_date'][:4]} but its row "
                            f"shows no year")
-        this_year_only = [r for r in TABLE_ROWS
+        this_year_only = [r for r in ROWS["table"]
                           if r["occasion_date"]
                           and int(r["occasion_date"][:4]) == today().year
                           and not r["until_date"]]
@@ -214,7 +233,7 @@ def run():
         marks = pg.eval_on_selector_all(".cal .ev.occ",
                                         "e => e.map(x => x.textContent.trim())")
         # Only the occasions falling inside the month on screen are marked.
-        this_month = [r for r in VIEW_ROWS
+        this_month = [r for r in ROWS["view"]
                       if r["occasion_date"][:7] == today().isoformat()[:7]]
         for r in this_month:
             if r["name"] not in marks:
@@ -225,7 +244,7 @@ def run():
         # A marker belongs only in the cells its occasion actually covers, so the
         # count is checked directly rather than inferred from the names present.
         want_marks = 0
-        for r in VIEW_ROWS:
+        for r in ROWS["view"]:
             start = dt.date.fromisoformat(r["occasion_date"])
             end = dt.date.fromisoformat(r["until_date"] or r["occasion_date"])
             day = start
@@ -238,15 +257,19 @@ def run():
                        f"expected {want_marks}")
         if "Coming up" not in cal:
             bad.append("the calendar does not say what is coming up")
-        if ON["name"] not in cal:
+        if ROWS["on"]["name"] not in cal:
             bad.append("an occasion in its run-up is not named on the calendar")
-        if LATER["name"] in cal.split("Coming up")[-1][:400]:
+        if ROWS["later"]["name"] in cal.split("Coming up")[-1][:400]:
             bad.append("an occasion 200 days out is listed as coming up")
 
         # the marker must be a link to the occasion, not dead text
-        href = pg.get_attribute(".cal .ev.occ", "href")
-        if not href or "/occasions" not in href:
-            bad.append(f"the festival marker does not open the occasion ({href})")
+        first_mark = pg.query_selector(".cal .ev.occ")
+        if not first_mark:
+            bad.append("there is no festival marker on the grid to open")
+        else:
+            href = first_mark.get_attribute("href")
+            if not href or "/occasions" not in href:
+                bad.append(f"the festival marker does not open the occasion ({href})")
 
         # ---------- the studio composer ----------
         pg.goto(BASE + "/studio/", wait_until="networkidle", timeout=20000)
@@ -256,7 +279,7 @@ def run():
             bad.append("the studio composer does not show what is coming up")
         else:
             said = note.inner_text()
-            if ON["name"] not in said:
+            if ROWS["on"]["name"] not in said:
                 bad.append(f"the studio does not name the occasion in its run-up ({said[:90]})")
             # Clicking one writes it into the brief. Which one is first depends on
             # the dates, so the button says what to expect rather than the test
@@ -269,7 +292,7 @@ def run():
             if picked not in draft:
                 bad.append(f"clicking {picked!r} does not put it in the brief ({draft!r})")
             # and the nearest occasion is the one offered first
-            nearest = min((r for r in VIEW_ROWS if r["days_until_promote"] <= 14),
+            nearest = min((r for r in ROWS["view"] if r["days_until_promote"] <= 14),
                           key=lambda r: r["occasion_date"])["name"]
             if picked != nearest:
                 bad.append(f"the first occasion offered is {picked!r}, not the nearest "
@@ -294,7 +317,7 @@ def run():
 
 probs = run()
 print(f"=== occasions: {len(probs)} problem(s) "
-      f"({len(TABLE_ROWS)} occasions, today {today()}) ===")
+      f"({len(ROWS["table"])} occasions, today {today()}) ===")
 for p in probs:
     print("  " + p)
 sys.exit(1 if probs else 0)
