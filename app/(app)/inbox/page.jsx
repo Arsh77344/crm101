@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useQuery, sb, updateRow } from '@/lib/db';
+import { useQuery, updateRow } from '@/lib/db';
 import { runWhatsapp } from '@/lib/assist';
 import { Page, Badge, Empty, Loading, ErrorNote, when } from '@/components/ui';
 import Dictate from '@/components/Dictate';
@@ -30,7 +30,6 @@ export default function Inbox() {
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [last, setLast] = useState(null);
-  const [health, setHealth] = useState(null);
 
   const q = useQuery(async (c) => {
     const [convos, rules, h] = await Promise.all([
@@ -38,13 +37,15 @@ export default function Inbox() {
         .order('escalated', { ascending: false })
         .order('last_in_at', { ascending: false, nullsFirst: false }).limit(60),
       c.from('escalation_topics').select('*').order('sort_order'),
-      runWhatsapp({ action: 'health' }).catch(() => null),
+      // Pessimistic on failure. A swallowed health call used to leave `health`
+      // null, which hid the "nothing was actually sent" line and made the inbox
+      // look live. Assuming no transport is the only safe way to be wrong.
+      runWhatsapp({ action: 'health' }).catch(() => ({ transport: 'none' })),
     ]);
     return { convos: convos.data || [], rules: rules.data || [], health: h };
   }, []);
 
-  useEffect(() => { if (q.data?.health) setHealth(q.data.health); }, [q.data]);
-
+  const health = q.data?.health || null;
   const convos = q.data?.convos || [];
   const shown = onlyMine ? convos.filter((c) => c.escalated) : convos;
   const convo = convos.find((c) => c.conversation_id === sel) || null;
@@ -57,6 +58,11 @@ export default function Inbox() {
     return { messages: data || [] };
   }, [sel]);
   const messages = m.data?.messages || [];
+
+  // The newest message, not wherever the scroll happened to be.
+  const endRef = useRef(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); },
+            [messages.length]);
 
   async function sendAnswer() {
     if (!convo || !answer.trim()) return;
@@ -125,19 +131,20 @@ export default function Inbox() {
         <div className="card">
           <div className="card-head">
             <h3>Conversations</h3>
-            {waiting > 0
-              ? <Badge>Needs you</Badge>
-              : <span className="small muted">{convos.length}</span>}
+            <div className="row" style={{ gap: 6 }}>
+              {waiting > 0 && <Badge>Needs you</Badge>}
+              <span className="small muted">{convos.length}</span>
+            </div>
           </div>
           <div className="card-body" style={{ padding: 8 }}>
             <label className="row small" style={{ gap: 5, cursor: 'pointer', padding: '0 4px 8px' }}>
               <input type="checkbox" checked={onlyMine} style={{ width: 'auto' }}
                 onChange={(e) => setOnlyMine(e.target.checked)} />
-              Only the ones waiting on you{waiting > 0 ? ` (${waiting})` : ''}
+              Only the ones that need you{waiting > 0 ? ` (${waiting})` : ''}
             </label>
             {q.loading ? <Loading /> : shown.length === 0 ? (
               <div className="small faint" style={{ padding: 8 }}>
-                {onlyMine ? 'Nothing is waiting on you.' : 'Nobody has written yet.'}
+                {onlyMine ? 'Nothing needs you.' : 'Nobody has written yet.'}
               </div>
             ) : shown.map((c) => (
               <button key={c.conversation_id} onClick={() => setSel(c.conversation_id)}
@@ -162,7 +169,8 @@ export default function Inbox() {
                 hint="Pick one on the left to read it, or try a message below to see what the agent does with it." />
             </div></div>
           ) : (
-            <div className="card">
+            <div className="card" style={{ display: 'flex', flexDirection: 'column',
+                                          minHeight: 560 }}>
               <div className="card-head">
                 <h3>{convo.wa_name || convo.wa_phone}</h3>
                 <div className="row" style={{ gap: 6 }}>
@@ -172,7 +180,8 @@ export default function Inbox() {
                       Their record</Link>)}
                 </div>
               </div>
-              <div className="card-body stack" style={{ gap: 10 }}>
+              <div className="card-body stack"
+                   style={{ gap: 10, flex: 1, overflowY: 'auto', maxHeight: 520 }}>
                 <div className="small faint" data-window>{windowLabel(convo)}</div>
 
                 {convo.escalated && (
@@ -203,6 +212,7 @@ export default function Inbox() {
                         Matched your {x.rule_hit} rule.
                       </div>)}
                   </div>))}
+                <div ref={endRef} />
               </div>
               <div className="card-foot stack" style={{ gap: 8 }}>
                 <div className="field" style={{ marginBottom: 0 }}>
@@ -215,12 +225,12 @@ export default function Inbox() {
                         e.preventDefault(); sendAnswer();
                       }
                     }} />
-                  <Dictate compact onText={(f) => setAnswer((cur) => f(cur))} />
+                  <Dictate onText={(f) => setAnswer((cur) => f(cur))} label="Say it instead" />
                 </div>
                 <div className="row" style={{ gap: 7 }}>
                   <button className="btn btn-primary btn-sm" onClick={sendAnswer}
                     disabled={Boolean(busy) || !answer.trim()}>
-                    {busy === 'answering' ? 'Saving…' : 'Reply'}
+                    {busy === 'answering' ? 'Working…' : 'Reply'}
                   </button>
                   <button className="btn btn-ghost btn-sm" type="button" onClick={closeIt}
                     disabled={Boolean(busy) || convo.status === 'Closed'}>
@@ -243,10 +253,15 @@ export default function Inbox() {
                 <label>What they say</label>
                 <textarea value={tryText} style={{ minHeight: 56 }}
                   placeholder="Is this one still available? · Can you give me a discount?"
-                  onChange={(e) => setTryText(e.target.value)} />
+                  onChange={(e) => setTryText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault(); tryOne();
+                    }
+                  }} />
               </div>
               <div className="row wrap" style={{ gap: 9 }}>
-                <div className="field" style={{ marginBottom: 0, width: 190 }}>
+                <div className="field" style={{ marginBottom: 0, width: 192 }}>
                   <label>From</label>
                   <input value={tryFrom} onChange={(e) => setTryFrom(e.target.value)} />
                 </div>
@@ -261,7 +276,7 @@ export default function Inbox() {
                 <div className={`note ${last.escalated ? 'warn' : 'good'} small`} data-outcome>
                   {last.escalated ? (
                     <>
-                      <strong>Sent to you: {last.rule}.</strong>{' '}
+                      <strong>Needs you: {last.rule}.</strong>{' '}
                       {last.matched ? `It matched "${last.matched}".` : ''}
                       {last.why ? ` ${last.why}` : ''}
                       {last.draft ? <div style={{ marginTop: 4 }}>
@@ -280,7 +295,7 @@ export default function Inbox() {
 
           <div className="card" data-rules>
             <div className="card-head">
-              <h3>What goes to you</h3>
+              <h3>What needs you</h3>
               <span className="small muted">
                 {(q.data?.rules || []).filter((r) => r.active).length} on
               </span>
@@ -299,7 +314,7 @@ export default function Inbox() {
                     <span className="faint">{(r.patterns || []).length} words</span>
                   </label>
                   {r.note && (
-                    <div className="muted" style={{ paddingLeft: 22, marginTop: 2 }}>{r.note}</div>)}
+                    <div className="muted" style={{ paddingLeft: 9, marginTop: 2 }}>{r.note}</div>)}
                 </div>))}
               <div className="small faint">
                 Whatever is turned off here, the agent still never states a price that is not

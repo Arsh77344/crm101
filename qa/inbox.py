@@ -99,7 +99,7 @@ RULES = [
 ]
 
 
-def run(transport="none"):
+def run(transport="none", health_fails=False):
     bad = []
     state = {"sent": [], "writes": [], "patched": []}
     with sync_playwright() as pw:
@@ -120,6 +120,9 @@ def run(transport="none"):
                 except Exception: body = {}
                 act = body.get("action")
                 if act == "health":
+                    if health_fails:
+                        return route.fulfill(status=500, content_type="application/json",
+                                             body=json.dumps({"error": "boom"}))
                     return route.fulfill(status=200, content_type="application/json",
                         body=json.dumps({"openai": True, "gemini": True, "anthropic": True,
                                          "groq": True, "transport": transport,
@@ -202,8 +205,33 @@ def run(transport="none"):
         rows = [r.inner_text() for r in pg.query_selector_all(".thread-row")]
         if len(rows) != len(CONVOS):
             bad.append(f"{len(rows)} rows in the list, expected {len(CONVOS)}")
-        elif "Meera R" not in rows[0] and "Needs you" not in rows[0]:
+        elif "Meera R" not in rows[0]:
             bad.append("the list does not put a conversation waiting on him first")
+
+        # A status has to carry the right tone, not just the right words. Asserting
+        # the text alone let a green "Needs you" through once -- green is this
+        # project's done tone, and reading a not-yet-done state as done is the one
+        # misunderstanding this page cannot afford.
+        want_tone = {"Needs you": "b-amber", "Waiting on customer": "b-blue"}
+        for c in CONVOS:
+            name = c["wa_name"] or c["wa_phone"]
+            row = pg.query_selector(f".thread-row:has-text({name!r})")
+            if not row:
+                continue
+            badge = row.query_selector(".badge")
+            if not badge:
+                bad.append(f"{name}'s status is not a badge")
+                continue
+            cls = badge.get_attribute("class") or ""
+            if badge.inner_text().strip() != c["status"]:
+                bad.append(f"{name} shows {badge.inner_text().strip()!r}, "
+                           f"expected {c['status']!r}")
+            tone = want_tone.get(c["status"], "")
+            if tone and tone not in cls:
+                bad.append(f"{name} is {c['status']!r} but its badge is {cls!r}, "
+                           f"expected {tone}")
+            if "b-green" in cls:
+                bad.append(f"{name} is {c['status']!r} and shows the done tone")
 
         # 4. the filter actually filters
         pg.check("input[type=checkbox]")
@@ -299,7 +327,7 @@ def run(transport="none"):
             o = out.inner_text()
             if "Price negotiation" not in o:
                 bad.append("the outcome does not name the rule that caught it")
-            if "Sent to you" not in o:
+            if "Needs you" not in o:
                 bad.append("the outcome does not say it was handed over")
 
         # 12. the rules he tunes are listed, and a toggle writes
@@ -333,6 +361,10 @@ def run(transport="none"):
 problems = run("none")
 # With a number attached the honesty note must disappear, and nothing else change.
 problems += [f"(with a number attached) {p}" for p in run("connected")]
+# And if the health call itself fails, the note must still be there. It used to be
+# swallowed, which left the inbox looking live while nothing was being sent --
+# the worst way for this page to be wrong.
+problems += [f"(health call failing) {p}" for p in run("none", health_fails=True)]
 
 print("=== inbox: %d problem(s)" % len(problems))
 for p in problems:

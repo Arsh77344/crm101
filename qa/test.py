@@ -5,11 +5,28 @@ from playwright.sync_api import sync_playwright
 # Served under a base path, exactly as GitHub Pages serves it: a build without
 # the base path hides any URL built from window.location.
 BASE = os.environ.get("QA_BASE", "http://127.0.0.1:9804/crm101")
-ROUTES = ["/agents", "/brands", "/payables","/", "/products", "/collections", "/launch", "/orders", "/shipments", "/payments",
-          "/returns", "/showrooms", "/contacts", "/companies", "/pipeline", "/journey",
-          "/activities", "/campaigns", "/generate", "/calendar", "/performance", "/links",
-          "/looks", "/studio", "/social", "/occasions", "/outreach", "/templates", "/broadcasts", "/analytics", "/consent", "/suppliers", "/expenses",
-          "/finance", "/tasks", "/automations", "/integrations", "/team", "/settings"]
+# Every route in the rail, read from lib/nav.js rather than written out here.
+#
+# This list used to be typed by hand, and it fell behind three times: a new page
+# would ship and the empty-state sweep -- the only check that visits every page
+# -- would quietly stop covering it while still reporting "all clear". Deriving
+# it means a page cannot be added to the rail without being swept.
+def _routes():
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "lib", "nav.js"), encoding="utf-8").read()
+    found = re.findall(r"\[\s*'(/[a-z0-9/-]*)'\s*,\s*'[^']*'\s*,\s*'[^']*'\s*\]", src)
+    out = []
+    for r in found:
+        if r not in out:
+            out.append(r)
+    if len(out) < 20 or "/" not in out:
+        raise SystemExit("test.py could not read the routes out of lib/nav.js "
+                         "(got %d: %r). Fix the parser rather than this message, "
+                         "or the sweep silently shrinks." % (len(out), out[:5]))
+    return out
+
+
+ROUTES = _routes()
 
 USER = {"id": "11111111-1111-1111-1111-111111111111", "email": "owner@test.local",
         "aud": "authenticated", "role": "authenticated", "app_metadata": {}, "user_metadata": {}}
