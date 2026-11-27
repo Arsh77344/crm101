@@ -61,7 +61,8 @@ def run():
         # supersedes, would bring it back to 7. Recorded here so the next page
         # added to Marketing trips this check rather than sliding past it.
         counts = pg.eval_on_selector_all(".nav-sec-n", "e => e.map(x => x.textContent.trim())")
-        if counts != ["4", "7", "3", "9", "4", "5", "6"]:
+        # Messaging went from 4 to 5 when the inbox was added.
+        if counts != ["4", "7", "3", "9", "5", "5", "6"]:
             bad.append(f"section counts are {counts}")
         if max(int(c) for c in counts) > 9:
             bad.append(f"a section now holds more than 9 pages: {counts}")

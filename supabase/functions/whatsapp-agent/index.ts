@@ -226,18 +226,19 @@ function catalogueLines(rows: any[]) {
 async function orderLines(admin: any, contactId: string | null) {
   if (!contactId) return { text: "", found: false };
   const { data } = await admin.from("orders")
-    .select("order_id,order_number,status,total,ordered_at,"
-      + "shipments(courier,awb,status,shipped_at,delivered_at)")
+    .select("order_id,order_number,order_status,total,ordered_at,"
+      + "shipments(courier,awb,status,tracking_url,shipped_at,delivered_at)")
     .eq("contact_id", contactId).order("ordered_at", { ascending: false }).limit(3);
   const rows = data ?? [];
   if (!rows.length) return { text: "", found: false };
   const text = rows.map((o: any) => {
     const s = (o.shipments ?? [])[0];
-    return `- order ${o.order_number ?? o.order_id} · ${o.status} · ${o.total}`
+    return `- order ${o.order_number ?? o.order_id} · ${o.order_status} · ${o.total}`
       + ` · placed ${String(o.ordered_at ?? "").slice(0, 10)}`
       + (s ? `\n    parcel: ${s.courier ?? "courier not set"}`
              + `${s.awb ? `, tracking ${s.awb}` : ", no tracking number yet"}`
              + ` · ${s.status ?? "status not set"}`
+             + (s.tracking_url ? `\n    they can follow it at ${s.tracking_url}` : "")
              + (s.delivered_at ? ` · delivered ${String(s.delivered_at).slice(0, 10)}` : "")
            : `\n    no parcel booked yet`);
   }).join("\n");

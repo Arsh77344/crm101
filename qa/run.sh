@@ -67,7 +67,7 @@ done
 echo "--- checks that drive the built site"
 for f in qa/test.py qa/nav.py qa/dashboard.py qa/details.py qa/looks.py qa/launch.py \
          qa/studio.py qa/courier.py qa/track.py qa/outreach.py qa/contrast.py \
-         qa/mobile.py qa/dictate.py qa/occasions.py qa/social.py; do
+         qa/mobile.py qa/dictate.py qa/occasions.py qa/social.py qa/inbox.py; do
   run_one "$f"
 done
 

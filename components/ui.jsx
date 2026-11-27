@@ -27,6 +27,11 @@ const TONE = {
   New: 'b-blue', Lead: 'b-blue', Qualified: 'b-blue', Proposal: 'b-blue', Opportunity: 'b-blue',
   Configured: 'b-blue', Completed: 'b-blue', Booked: 'b-blue', 'Picked up': 'b-blue', Created: 'b-blue',
   Commissioned: 'b-blue', High: 'b-amber', Urgent: 'b-red',
+  // A conversation, and one message in it. 'Ready to send' is amber on purpose:
+  // it means written but not actually sent, and reading it as done is the one
+  // misunderstanding this feature cannot afford.
+  Open: '', Closed: '', 'Needs you': 'b-amber', 'Waiting on customer': 'b-blue',
+  'Ready to send': 'b-amber', Sent: 'b-green', Held: 'b-red',
   Lost: 'b-red', Failed: 'b-red', Error: 'b-red', OptedOut: 'b-red', DoNotContact: 'b-red',
   Cancelled: 'b-red', RTO: 'b-red', Refunded: 'b-red', Rejected: 'b-red', Archived: '', Disconnected: '',
 };
