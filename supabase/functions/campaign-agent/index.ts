@@ -191,9 +191,6 @@ week of the festival", not the day. Say in "say" which date the owner should con
 confirmed or fixed may be printed.`;
 }
 
-// The workspace's own sending rules. An omni-channel plan that breaks them
-// cannot actually be run, so the agent is told them rather than being left to
-// invent a cadence.
 // What the always-on social side has already committed to. A campaign that
 // ignores it collides with it: two sets of posts on the same days, two stories
 // in one week, and the owner discovering both only when the calendar fills up.
@@ -228,6 +225,9 @@ Plan around it rather than over it:
   stories running at once is the thing to avoid, and the owner decides which one survives.`;
 }
 
+// The workspace's own sending rules. An omni-channel plan that breaks them
+// cannot actually be run, so the agent is told them rather than being left to
+// invent a cadence.
 function guardLines(settings: Record<string, string>, w: any) {
   const approved = (w.templates ?? []).filter((t: any) => /whats/i.test(t.channel ?? ""));
   const names = approved.map((t: any) => `"${t.name}" (${t.category})`).join(", ");
